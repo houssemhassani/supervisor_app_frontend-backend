@@ -1,0 +1,40 @@
+<div class="login-container">
+
+  <!-- ---------------- LEFT IMAGE ---------------- -->
+  <div class="left" [ngClass]="selectedRole.toLowerCase()">
+    <div class="overlay"></div>
+  </div>
+
+  <!-- ---------------- RIGHT PANEL ---------------- -->
+  <div class="right">
+
+    <!-- HORLOGE NUMERIQUE AVEC GLOW -->
+    
+
+    <div class="login-box">
+      <div class="clock">
+      {{ hours }} : {{ minutes }} 
+    </div>
+      <h1 class="app-title">SUPERVISOR APP</h1>
+      <h2 class="login-text">LOGIN</h2>
+
+      <!-- ROLE BUTTONS -->
+      <div class="roles">
+        <button (click)="changeRole('EMPLOYEE')" [class.active]="selectedRole==='EMPLOYEE'">Employee</button>
+        <button (click)="changeRole('MANAGER')" [class.active]="selectedRole==='MANAGER'">Manager</button>
+        <button (click)="changeRole('ADMIN')" [class.active]="selectedRole==='ADMIN'">Admin</button>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <form [formGroup]="loginForm" (ngSubmit)="login()">
+        <input type="email" placeholder="Email" formControlName="email" class="input-field">
+        <input type="password" placeholder="Password" formControlName="password" class="input-field">
+        <button type="submit" class="btn-login">Login as {{selectedRole}}</button>
+        <div class="forgot-password">
+  <a (click)="goToForgotPassword()">Forgot Password?</a>
+</div>
+      </form>
+    </div>
+
+  </div>
+</div>
