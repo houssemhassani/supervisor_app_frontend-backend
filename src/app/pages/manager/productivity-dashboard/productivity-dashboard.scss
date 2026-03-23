@@ -1,0 +1,87 @@
+.dashboard-container {
+  font-family: 'Segoe UI', sans-serif;
+  padding: 40px;
+  background: linear-gradient(135deg, #f5f6fa, #e9ecef);
+  min-height: 100vh;
+
+  h1 {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 20px;
+    color: #1f2937;
+    text-align: center;
+  }
+
+  .filter-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 30px;
+
+    button {
+      padding: 10px 20px;
+      border-radius: 12px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.3s;
+      background: #e5e7eb;
+      color: #374151;
+
+      &.active {
+        background: linear-gradient(90deg, #4f46e5, #6366f1);
+        color: white;
+      }
+
+      &:hover {
+        transform: translateY(-2px) scale(1.05);
+      }
+
+      &.btn-pdf {
+        background: #10b981;
+        color: white;
+      }
+    }
+  }
+
+  .chart-wrapper {
+    max-width: 900px;
+    margin: 0 auto 40px auto;
+    canvas {
+      background: #fff;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+    }
+  }
+
+  .report-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+
+    th, td {
+      padding: 12px 15px;
+      font-size: 14px;
+    }
+
+    thead {
+      background: #4f46e5;
+      color: white;
+      font-weight: 700;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    tbody tr:hover {
+      background: rgba(79,70,229,0.05);
+      transition: 0.3s;
+    }
+  }
+}

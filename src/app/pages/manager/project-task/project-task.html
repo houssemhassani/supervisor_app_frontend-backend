@@ -1,0 +1,144 @@
+<div class="ptm-dashboard">
+
+  <!-- HEADER -->
+  <header class="ptm-header">
+    <h1>Project & Task Manager</h1>
+    <button class="btn-add-project" (click)="openProjectForm()">
+      <mat-icon>add_circle_outline</mat-icon> Add Project
+    </button>
+  </header>
+
+  <!-- PROJECTS GRID -->
+  <section class="projects-grid">
+    <div class="project-card" *ngFor="let project of projects">
+      <div class="card-top">
+        <h2>{{ project.name }}</h2>
+        <div class="card-actions">
+          <button (click)="openProjectForm(project)" matTooltip="Edit Project"><mat-icon>edit</mat-icon></button>
+          <button (click)="openConfirm(project, 'deleteProject')" matTooltip="Delete Project"><mat-icon>delete</mat-icon></button>
+        </div>
+      </div>
+
+      <p class="project-desc">{{ project.description || 'No description' }}</p>
+
+      <!-- TASKS -->
+      <div class="tasks-section">
+        <h3>Tasks</h3>
+        <div class="tasks-list">
+          <div class="task-card" *ngFor="let task of project.tasks">
+            <div class="task-left">
+              <h4>{{ task.title }}</h4>
+              <p>Assigned: {{ task.assigned_to?.firstName || '-' }}</p>
+              <p>Due: {{ task.due_date || '-' }}</p>
+            </div>
+            <div class="task-right">
+              <span class="badge" [ngClass]="task.statuts.toLowerCase()">{{ task.statuts }}</span>
+              <span class="priority" [ngClass]="task.priority.toLowerCase()">{{ task.priority }}</span>
+              <div class="task-actions">
+                <button (click)="openTaskForm(project, task)" matTooltip="Edit"><mat-icon>edit</mat-icon></button>
+                <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete"><mat-icon>delete</mat-icon></button>
+                <button (click)="openConfirm(task, 'toggleTask')" matTooltip="Toggle Status"><mat-icon>toggle_on</mat-icon></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-add-task" (click)="openTaskForm(project)"><mat-icon>add_circle</mat-icon> Add Task</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODAL : Project / Task Form -->
+  <div class="modal-backdrop" *ngIf="showProjectForm || showTaskForm">
+    <div class="modal-box">
+
+      <h2>
+        {{ showProjectForm ? (editingProject?.id===0?'New Project':'Edit Project') : (editingTask?.id===0?'New Task':'Edit Task') }}
+      </h2>
+
+      <form (ngSubmit)="showProjectForm ? saveProject() : saveTask()" #formRef="ngForm">
+
+        <!-- PROJECT FORM -->
+        <ng-container *ngIf="showProjectForm">
+          <div class="form-group">
+            <label>Name <span class="required">*</span></label>
+            <input type="text" [(ngModel)]="editingProject!.name" name="name" required placeholder="Enter project name">
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea [(ngModel)]="editingProject!.description" name="description" placeholder="Enter project description"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Status</label>
+            <select [(ngModel)]="editingProject!.statuts" name="status">
+              <option *ngFor="let s of projectStatuses" [value]="s">{{ s }}</option>
+            </select>
+          </div>
+        </ng-container>
+
+        <!-- TASK FORM -->
+        <ng-container *ngIf="showTaskForm">
+          <div class="form-group">
+            <label>Title <span class="required">*</span></label>
+            <input type="text" [(ngModel)]="editingTask!.title" name="title" required placeholder="Enter task title">
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea [(ngModel)]="editingTask!.description" name="description" placeholder="Enter task description"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Assigned To</label>
+            <select [(ngModel)]="editingTask!.assigned_to" name="assigned">
+              <option [ngValue]="null">Unassigned</option>
+              <option *ngFor="let user of users" [ngValue]="user">{{ user.firstName }} {{ user.lastName }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Status</label>
+            <select [(ngModel)]="editingTask!.statuts" name="status">
+              <option *ngFor="let s of taskStatuses" [value]="s">{{ s }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Priority</label>
+            <select [(ngModel)]="editingTask!.priority" name="priority">
+              <option *ngFor="let p of taskPriorities" [value]="p">{{ p }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Due Date</label>
+            <input type="date" [(ngModel)]="editingTask!.due_date" name="due_date">
+          </div>
+        </ng-container>
+
+        <div class="modal-actions">
+          <button type="submit" class="btn-primary" [disabled]="formRef.invalid"><mat-icon>save</mat-icon> Save</button>
+          <button type="button" class="btn-secondary" (click)="showProjectForm=false; showTaskForm=false"><mat-icon>close</mat-icon> Cancel</button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- CONFIRMATION MODAL -->
+  <div class="modal-backdrop" *ngIf="showConfirmModal">
+    <div class="modal-box confirm-modal">
+      <div class="modal-header">
+        <mat-icon>{{ confirmAction.includes('delete') ? 'warning' : 'help_outline' }}</mat-icon>
+        <h3>{{ getConfirmTitle() }}</h3>
+      </div>
+      <p>{{ getConfirmMessage() }}</p>
+      <div class="modal-actions">
+        <button class="btn-primary" (click)="confirm()"><mat-icon>check_circle</mat-icon> Yes</button>
+        <button class="btn-secondary" (click)="cancelConfirm()"><mat-icon>cancel</mat-icon> No</button>
+      </div>
+    </div>
+  </div>
+
+</div>

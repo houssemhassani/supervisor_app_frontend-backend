@@ -1,0 +1,207 @@
+<!-- dashboard.html -->
+<div class="dashboard-container">
+  <div id="dashboard-content">
+    <!-- Header avec effet glassmorphism -->
+    <div class="dashboard-header">
+      <div class="header-left">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 7h-4.18A3 3 0 0 0 16 5.18V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+              <path d="M8 12h8M12 8v8"/>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <h1>Work<span>Flow</span></h1>
+            <p>Analytics Dashboard</p>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="date-display">
+          <span class="date-icon">📅</span>
+          <span>{{ currentDate | date:'EEEE d MMMM yyyy' }}</span>
+        </div>
+        <div class="period-selector">
+          <button [class.active]="selectedPeriod === 'week'" (click)="setPeriod('week')">Semaine</button>
+          <button [class.active]="selectedPeriod === 'month'" (click)="setPeriod('month')">Mois</button>
+          <button [class.active]="selectedPeriod === 'year'" (click)="setPeriod('year')">Année</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI Cards avec animations -->
+    <div class="kpi-grid">
+      <div class="kpi-card" *ngFor="let kpi of kpis" [ngClass]="kpi.color">
+        <div class="kpi-icon">
+          {{ kpi.icon }}
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-value">{{ kpi.value }}</div>
+          <div class="kpi-label">{{ kpi.label }}</div>
+          <div class="kpi-trend" [ngClass]="kpi.trendClass">
+            {{ kpi.trend }} <span class="trend-icon">{{ kpi.trendIcon }}</span>
+          </div>
+        </div>
+        <div class="kpi-glow"></div>
+      </div>
+    </div>
+
+    <!-- Graphique avec effet 3D -->
+    <div class="chart-card">
+      <div class="card-header">
+        <div>
+          <h3>📊 Performance des employés</h3>
+          <p>Score de productivité par collaborateur</p>
+        </div>
+        <div class="card-actions">
+          <button class="action-icon" (click)="toggleChartType()" title="Changer type de graphique">
+            📈
+          </button>
+          <button class="action-icon" (click)="refreshChart()" title="Rafraîchir">
+            🔄
+          </button>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas 
+          baseChart
+          [data]="productivityData"
+          [options]="productivityOptions"
+          [type]="chartType">
+        </canvas>
+      </div>
+    </div>
+
+    <!-- Rapports détaillés avec design moderne -->
+    <div class="reports-card">
+      <div class="card-header">
+        <div>
+          <h3>📋 Rapports de productivité</h3>
+          <p>Analyse détaillée des performances individuelles</p>
+        </div>
+        <div class="search-box">
+          <input 
+            type="text" 
+            placeholder="Rechercher un employé..." 
+            class="search-input"
+            [(ngModel)]="searchTerm"
+            (input)="filterEmployees()">
+          <span class="search-icon">🔍</span>
+        </div>
+      </div>
+      
+      <div class="table-wrapper">
+        <table class="modern-table">
+          <thead>
+            <tr>
+              <th>Employé</th>
+              <th>Temps travaillé</th>
+              <th>Activité</th>
+              <th>Tâches complétées</th>
+              <th>Score</th>
+              <th>Performance</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let emp of filteredReports" class="table-row">
+              <td>
+                <div class="employee-info">
+                  <div class="employee-avatar" [style.background]="emp.avatarGradient">
+                    {{ emp.user.charAt(0) }}
+                  </div>
+                  <div class="employee-details">
+                    <strong>{{ emp.user }}</strong>
+                    <span>{{ emp.role }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="time-cell">
+                  <span class="time-icon">⏱️</span>
+                  <span>{{ formatWorkTime(emp.workTime) }}</span>
+                </div>
+              </td>
+              <td>
+                <div class="activity-stats">
+                  <div class="stat" title="Clicks clavier">
+                    ⌨️ {{ emp.keyboardClicks | number }}
+                  </div>
+                  <div class="stat" title="Clicks souris">
+                    🖱️ {{ emp.mouseClicks | number }}
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="tasks-progress">
+                  <span class="tasks-count">{{ emp.tasksCompleted }}/{{ emp.tasksTotal }}</span>
+                  <div class="progress-bar">
+                    <div class="progress-fill" [style.width.%]="(emp.tasksCompleted/emp.tasksTotal)*100"></div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="score-circle">
+                  <svg viewBox="0 0 36 36" class="circle-chart">
+                    <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path class="circle-fill" 
+                          [attr.stroke-dasharray]="emp.productivityScore + ', 100'"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <text x="18" y="20.35" class="percentage">{{ emp.productivityScore }}%</text>
+                  </svg>
+                </div>
+              </td>
+              <td>
+                <div class="trend-indicator" [ngClass]="getTrendClass(emp.productivityScore)">
+                  {{ getTrendText(emp.productivityScore) }}
+                </div>
+              </td>
+              <td>
+                <span class="status-badge" [ngClass]="getStatusClass(emp.productivityScore)">
+                  {{ getStatusText(emp.productivityScore) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="table-footer">
+        <div class="footer-stats">
+          <div class="footer-stat">
+            📊 Moyenne: <strong>{{ getAverageProductivity() }}%</strong>
+          </div>
+          <div class="footer-stat">
+            🏆 Top performer: <strong>{{ getBestEmployee() }}</strong>
+          </div>
+          <div class="footer-stat">
+            ⌨️ Total clicks: <strong>{{ getTotalClicks() | number }}</strong>
+          </div>
+          <div class="footer-stat">
+            ⏱️ Temps total: <strong>{{ formatWorkTime(getTotalWorkTime()) }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Action Buttons -->
+  <div class="fab-buttons">
+    <button class="fab-btn export-btn" (click)="exportPDF()" title="Exporter en PDF">
+      📄
+    </button>
+    <button class="fab-btn csv-btn" (click)="exportToCSV()" title="Exporter en CSV">
+      📊
+    </button>
+    <button class="fab-btn refresh-btn" (click)="refreshData()" [class.loading]="isLoading" title="Rafraîchir">
+      🔄
+    </button>
+  </div>
+
+  <!-- Notification Toast -->
+  <div class="notification" [class.show]="showNotification" [ngClass]="notificationType">
+    <span class="notification-icon">{{ notificationIcon }}</span>
+    <span class="notification-message">{{ notificationMessage }}</span>
+  </div>
+</div>

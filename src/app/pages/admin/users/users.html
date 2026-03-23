@@ -1,0 +1,101 @@
+<div class="users-page">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>User Management</h1>
+    <button class="btn-create" (click)="openForm()">
+      <mat-icon>person_add</mat-icon> New User
+    </button>
+  </div>
+
+  <!-- Users Table -->
+  <div class="table-wrapper">
+    <table class="users-table">
+      <thead>
+        <tr>
+          <th>Avatar</th>
+          <th>Full Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Department</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let user of users">
+          <td><img [src]="user.avatar" alt="avatar" class="avatar"></td>
+          <td>{{ user.firstName }} {{ user.lastName }}</td>
+          <td>{{ user.email }}</td>
+          <td><span class="role-badge" [ngClass]="user.role.toLowerCase()">{{ user.role }}</span></td>
+          <td>{{ user.department || '-' }}</td>
+          <td><span class="status-badge" [ngClass]="user.status.toLowerCase()">{{ user.status }}</span></td>
+          <td class="actions">
+            <button class="action-btn edit" (click)="openForm(user)" matTooltip="Edit"><mat-icon>edit</mat-icon></button>
+            <button class="action-btn delete" (click)="openConfirm(user,'delete')" matTooltip="Delete"><mat-icon>delete</mat-icon></button>
+            <button class="action-btn toggle" (click)="openConfirm(user,'toggle')" matTooltip="Toggle Status">
+              <mat-icon>{{ user.status==='ACTIVE' ? 'toggle_off':'toggle_on' }}</mat-icon>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- User Form Modal -->
+  <div class="modal form-modal" *ngIf="showForm">
+    <div class="modal-content">
+      <h2>{{ editingUser.id === 0 ? 'Create' : 'Edit' }} User</h2>
+      <form (ngSubmit)="saveUser()">
+        <div class="form-group">
+          <label>First Name</label>
+          <input type="text" [(ngModel)]="editingUser.firstName" name="firstName" required>
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" [(ngModel)]="editingUser.lastName" name="lastName" required>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" [(ngModel)]="editingUser.email" name="email" required>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select [(ngModel)]="editingUser.role" name="role" required>
+            <option *ngFor="let role of roles" [value]="role">{{ role }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select [(ngModel)]="editingUser.status" name="status">
+            <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Avatar URL</label>
+          <input type="text" [(ngModel)]="editingUser.avatar" name="avatar">
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn-submit"><mat-icon>save</mat-icon> {{ editingUser.id === 0 ? 'Create' : 'Save' }}</button>
+          <button type="button" class="btn-cancel" (click)="closeForm()"><mat-icon>close</mat-icon> Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal confirm-modal" *ngIf="showConfirmModal">
+    <div class="modal-content" [ngClass]="{'delete': confirmAction==='delete','toggle': confirmAction==='toggle'}">
+      <div class="modal-header">
+        <mat-icon class="icon">{{ confirmAction==='delete' ? 'warning' : 'help_outline' }}</mat-icon>
+        <h3>{{ getConfirmTitle() }}</h3>
+      </div>
+      <p>{{ getConfirmMessage() }}</p>
+      <div class="modal-actions">
+        <button class="btn-confirm" (click)="confirm()"><mat-icon>check_circle</mat-icon> Yes</button>
+        <button class="btn-cancel" (click)="cancelConfirm()"><mat-icon>cancel</mat-icon> No</button>
+      </div>
+    </div>
+  </div>
+
+</div>
