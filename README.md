@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SupervisorAppFrontend
 
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.2.
@@ -57,3 +58,6 @@ Angular CLI does not come with an end-to-end testing framework by default. You c
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+=======
+# supervisor_app_frontend-backend
+>>>>>>> 7ff1d6ce2b24f21ca0c0b34da95b073f01e0b1f7
