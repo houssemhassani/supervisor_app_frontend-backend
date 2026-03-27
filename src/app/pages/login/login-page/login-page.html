@@ -1,38 +1,93 @@
+<!-- src/app/login-page/login-page.html -->
+
 <div class="login-container">
 
-  <!-- ---------------- LEFT IMAGE ---------------- -->
+  <!-- LEFT IMAGE -->
   <div class="left" [ngClass]="selectedRole.toLowerCase()">
     <div class="overlay"></div>
   </div>
 
-  <!-- ---------------- RIGHT PANEL ---------------- -->
+  <!-- RIGHT PANEL -->
   <div class="right">
 
-    <!-- HORLOGE NUMERIQUE AVEC GLOW -->
+    <!-- HORLOGE NUMERIQUE -->
     
 
     <div class="login-box">
-      <div class="clock">
-      {{ hours }} : {{ minutes }} 
-    </div>
       <h1 class="app-title">SUPERVISOR APP</h1>
       <h2 class="login-text">LOGIN</h2>
 
+      <!-- MESSAGE D'ERREUR -->
+      <div *ngIf="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </div>
+      <div class="clock">
+      {{ hours }} : {{ minutes }}
+    </div>
       <!-- ROLE BUTTONS -->
       <div class="roles">
-        <button (click)="changeRole('EMPLOYEE')" [class.active]="selectedRole==='EMPLOYEE'">Employee</button>
-        <button (click)="changeRole('MANAGER')" [class.active]="selectedRole==='MANAGER'">Manager</button>
-        <button (click)="changeRole('ADMIN')" [class.active]="selectedRole==='ADMIN'">Admin</button>
+        <button 
+          (click)="changeRole('employee')" 
+          [class.active]="selectedRole==='employee'"
+          [disabled]="isLoading">
+          Employee
+        </button>
+        <button 
+          (click)="changeRole('manager')" 
+          [class.active]="selectedRole==='manager'"
+          [disabled]="isLoading">
+          Manager
+        </button>
+        <button 
+          (click)="changeRole('admin')" 
+          [class.active]="selectedRole==='admin'"
+          [disabled]="isLoading">
+          Admin
+        </button>
       </div>
 
       <!-- LOGIN FORM -->
       <form [formGroup]="loginForm" (ngSubmit)="login()">
-        <input type="email" placeholder="Email" formControlName="email" class="input-field">
-        <input type="password" placeholder="Password" formControlName="password" class="input-field">
-        <button type="submit" class="btn-login">Login as {{selectedRole}}</button>
+        
+        <!-- Champ Email -->
+        <div class="form-group">
+          <input 
+            type="email" 
+            placeholder="Email" 
+            formControlName="email" 
+            class="input-field"
+            [class.error]="email?.invalid && email?.touched">
+          <div *ngIf="email?.invalid && email?.touched" class="field-error">
+            {{ emailError }}
+          </div>
+        </div>
+
+        <!-- Champ Mot de passe -->
+        <div class="form-group">
+          <input 
+            type="password" 
+            placeholder="Password" 
+            formControlName="password" 
+            class="input-field"
+            [class.error]="password?.invalid && password?.touched">
+          <div *ngIf="password?.invalid && password?.touched" class="field-error">
+            {{ passwordError }}
+          </div>
+        </div>
+
+        <!-- Bouton Login -->
+        <button 
+          type="submit" 
+          class="btn-login" 
+          [disabled]="isLoading">
+          <span *ngIf="!isLoading">Login as {{selectedRole}}</span>
+          <span *ngIf="isLoading">Connecting...</span>
+        </button>
+
+        <!-- Lien Mot de passe oublié -->
         <div class="forgot-password">
-  <a (click)="goToForgotPassword()">Forgot Password?</a>
-</div>
+          <a (click)="goToForgotPassword()" [class.disabled]="isLoading">Forgot Password?</a>
+        </div>
       </form>
     </div>
 

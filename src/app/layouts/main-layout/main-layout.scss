@@ -1,0 +1,15 @@
+.main-layout {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #eef2f7 100%);
+
+  .main-content {
+    padding-top: 70px;
+    min-height: calc(100vh - 70px);
+    
+    > * {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+  }
+}

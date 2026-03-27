@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { AuthService } from '../../../core/services/AuthService/auth';
 
-type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
+type Role = 'admin' | 'manager' | 'employee';
 
 @Component({
   selector: 'app-login-page',
@@ -12,27 +13,51 @@ type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
   styleUrls: ['./login-page.scss'],
   imports: [CommonModule, ReactiveFormsModule]
 })
-export class LoginPage implements OnInit {
+export class LoginPage implements OnInit, OnDestroy {
 
   loginForm!: FormGroup;
-  selectedRole: Role = 'EMPLOYEE';
- now = new Date();
+  selectedRole: Role = 'admin';
+  
   // Horloge numérique
-  hours: string =  String(this.now.getHours()).padStart(2,'0');
-  minutes: string = String(this.now.getMinutes()).padStart(2,'0');
-  seconds: string = String(this.now.getSeconds()).padStart(2,'0');
+  hours: string = '';
+  minutes: string = '';
+  seconds: string = '';
+  
+  // États
+  isLoading: boolean = false;
+  errorMessage: string = '';
+  
+  private clockInterval: any;
 
-  constructor(private fb: FormBuilder,private router: Router) {}
-goToForgotPassword() {
-  this.router.navigate(['/forgot-password']);
-}
+  constructor(
+    private fb: FormBuilder,
+    private router: Router,
+    private authService: AuthService
+  ) {}
+
+  goToForgotPassword(): void {
+    this.router.navigate(['/forgot-password']);
+  }
+
   ngOnInit(): void {
     this.loginForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
-      password: ['', Validators.required]
+      password: ['', [Validators.required, Validators.minLength(6)]]
     });
 
     this.startClock();
+    
+    // Rediriger si déjà connecté
+    if (this.authService.isAuthenticated()) {
+      const role = this.authService.getUserRole();
+      this.redirectByRole(role);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.clockInterval) {
+      clearInterval(this.clockInterval);
+    }
   }
 
   changeRole(role: Role): void {
@@ -44,20 +69,75 @@ goToForgotPassword() {
       this.loginForm.markAllAsTouched();
       return;
     }
-    console.log({ ...this.loginForm.value, role: this.selectedRole });
-    // TODO: appeler API pour login
+
+    this.isLoading = true;
+    this.errorMessage = '';
+    this.loginForm.disable();
+
+    const { email, password } = this.loginForm.value;
+
+    console.log('🔵 Tentative de connexion avec:', { email, password });
+
+    this.authService.login(email, password).subscribe({
+      next: (response) => {
+        console.log('🟢 Connexion réussie!', response);
+        this.isLoading = false;
+        this.loginForm.enable();
+        // La redirection est gérée dans AuthService
+      },
+      error: (error) => {
+        console.log('🔴 Erreur de connexion:', error);
+        this.isLoading = false;
+        this.loginForm.enable();
+        this.errorMessage = error.message || 'Email ou mot de passe incorrect';
+      }
+    });
   }
 
   get email() { return this.loginForm.get('email'); }
   get password() { return this.loginForm.get('password'); }
 
-  // ================= HORLOGE =================
+  get emailError(): string {
+    if (this.email?.errors?.['required']) return 'Email is required';
+    if (this.email?.errors?.['email']) return 'Please enter a valid email address';
+    return '';
+  }
+
+  get passwordError(): string {
+    if (this.password?.errors?.['required']) return 'Password is required';
+    if (this.password?.errors?.['minlength']) return 'Password must be at least 6 characters';
+    return '';
+  }
+
   startClock(): void {
-    setInterval(() => {
-      const now = new Date();
-      this.hours = String(now.getHours()).padStart(2,'0');
-      this.minutes = String(now.getMinutes()).padStart(2,'0');
-      this.seconds = String(now.getSeconds()).padStart(2,'0');
+    this.updateClock();
+    this.clockInterval = setInterval(() => {
+      this.updateClock();
     }, 1000);
+  }
+
+  private updateClock(): void {
+    const now = new Date();
+    this.hours = String(now.getHours()).padStart(2, '0');
+    this.minutes = String(now.getMinutes()).padStart(2, '0');
+    this.seconds = String(now.getSeconds()).padStart(2, '0');
+  }
+
+  private redirectByRole(role: string | null): void {
+    if (!role) return;
+    
+    switch (role.toUpperCase()) {
+      case 'ADMIN':
+        this.router.navigate(['/admin/dashboard']);
+        break;
+      case 'MANAGER':
+        this.router.navigate(['/manager/dashboard']);
+        break;
+      case 'EMPLOYEE':
+        this.router.navigate(['/employee/dashboard']);
+        break;
+      default:
+        this.router.navigate(['/dashboard']);
+    }
   }
 }

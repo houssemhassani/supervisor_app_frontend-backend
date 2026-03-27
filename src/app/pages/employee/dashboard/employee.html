@@ -1,0 +1,275 @@
+<!-- employee-dashboard.component.html -->
+<div class="dashboard-container">
+  <!-- Header -->
+  <div class="dashboard-header">
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-icon">👤</div>
+        <div class="logo-text">
+          <h1>Mon<span>Espace</span></h1>
+          <p>{{ user?.username || 'Employé' }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="date-display">
+        <span class="date-icon">📅</span>
+        <span>{{ currentDate | date:'EEEE d MMMM yyyy' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="quick-actions">
+    <button class="action-btn" [class.active]="!isCheckedIn && !isOnBreak" (click)="checkIn()" [disabled]="isLoading || isCheckedIn">
+      <span class="btn-icon">✅</span>
+      <span>Pointer Arrivée</span>
+    </button>
+    
+    <button class="action-btn" [class.active]="isCheckedIn && !isOnBreak && !isCheckedOut" (click)="startBreak()" [disabled]="isLoading || !isCheckedIn || isOnBreak || isCheckedOut">
+      <span class="btn-icon">☕</span>
+      <span>Démarrer Pause</span>
+    </button>
+    
+    <button class="action-btn" [class.active]="isOnBreak" (click)="endBreak()" [disabled]="isLoading || !isOnBreak">
+      <span class="btn-icon">▶️</span>
+      <span>Reprendre</span>
+    </button>
+    <button class="action-btn" (click)="checkOut()" [disabled]="!isCheckedIn || isCheckedOut">
+  <span class="btn-icon">🏠</span>
+  <span>Pointer Sortie</span>
+</button>
+    
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">⏱️</div>
+      <div class="stat-info">
+        <div class="stat-value">{{ workHoursToday.toFixed(1) }}h</div>
+        <div class="stat-label">Heures travaillées</div>
+      </div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="stat-icon">☕</div>
+      <div class="stat-info">
+        <div class="stat-value">{{ breakHoursToday.toFixed(1) }}h</div>
+        <div class="stat-label">Pause aujourd'hui</div>
+      </div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <div class="stat-info">
+        <div class="stat-value">{{ productivityScore }}%</div>
+        <div class="stat-label">Productivité</div>
+      </div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="stat-icon">🏆</div>
+      <div class="stat-info">
+        <div class="stat-value">{{ tasksCompleted }}/{{ totalTasks }}</div>
+        <div class="stat-label">Tâches complétées</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Current Status -->
+  <div class="status-card" *ngIf="isCheckedIn">
+    <div class="status-header">
+      <span class="status-icon">🟢</span>
+      <span class="status-text">En service</span>
+      <span class="status-time">{{ formatDateTime(startTime) }}</span>
+    </div>
+    <div class="status-detail" *ngIf="isOnBreak">
+      <span class="break-icon">☕</span>
+      <span>En pause depuis {{ breakDuration }} minutes</span>
+    </div>
+  </div>
+
+  <div class="status-card warning" *ngIf="!isCheckedIn && !isCheckedOut && !isLoading">
+    <div class="status-header">
+      <span class="status-icon">⚪</span>
+      <span class="status-text">Non pointé aujourd'hui</span>
+    </div>
+    <div class="status-detail">
+      <span>Cliquez sur "Pointer Arrivée" pour commencer votre journée</span>
+    </div>
+  </div>
+
+  <!-- My Tasks Section -->
+  <div class="tasks-card">
+    <div class="card-header">
+      <div>
+        <h3>📋 Mes tâches</h3>
+        <p>Suivi de vos tâches quotidiennes</p>
+      </div>
+      <div class="card-actions">
+        <select [(ngModel)]="taskFilter" (change)="filterTasks()" class="filter-select">
+          <option value="all">Toutes</option>
+          <option value="TODO">À faire</option>
+          <option value="IN_PROGRESS">En cours</option>
+          <option value="DONE">Terminées</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="tasks-list">
+      <div class="task-item" *ngFor="let task of filteredTasks">
+        <div class="task-status">
+          <input type="checkbox" 
+                 [checked]="task.statuts === 'DONE'"
+                 (change)="updateTaskStatus(task)"
+                 [disabled]="task.statuts === 'DONE'">
+        </div>
+        <div class="task-content">
+          <div class="task-title">{{ task.title }}</div>
+          <div class="task-desc">{{ task.description }}</div>
+          <div class="task-meta">
+            <span class="task-priority" [ngClass]="task.priority.toLowerCase()">
+              {{ task.priority }}
+            </span>
+            <span class="task-due">📅 {{ formatDate(task.due_date) }}</span>
+          </div>
+        </div>
+        <div class="task-badge" [ngClass]="task.statuts.toLowerCase()">
+          {{ getStatusLabel(task.statuts) }}
+        </div>
+      </div>
+      
+      <div class="empty-state" *ngIf="filteredTasks.length === 0">
+        <span class="empty-icon">📭</span>
+        <p>Aucune tâche trouvée</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weekly Performance Chart -->
+  <div class="chart-card">
+    <div class="card-header">
+      <div>
+        <h3>📊 Performance hebdomadaire</h3>
+        <p>Évolution de votre productivité</p>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas 
+        baseChart
+        [data]="weeklyData"
+        [options]="chartOptions"
+        type="line">
+      </canvas>
+    </div>
+  </div>
+
+  <!-- Leave Request Section -->
+  <div class="leave-card">
+    <div class="card-header">
+      <div>
+        <h3>🏖️ Demandes de congé</h3>
+        <p>Gérer vos demandes d'absence</p>
+      </div>
+      <button class="new-request-btn" (click)="openLeaveModal()">
+        + Nouvelle demande
+      </button>
+    </div>
+    
+    <div class="leave-stats">
+      <div class="leave-stat">
+        <span class="stat-label">Congés disponibles</span>
+        <span class="stat-value">{{ leaveBalance }} jours</span>
+      </div>
+      <div class="leave-stat">
+        <span class="stat-label">Demandes en attente</span>
+        <span class="stat-value">{{ pendingRequests }}</span>
+      </div>
+    </div>
+    
+    <div class="leave-list">
+      <div class="leave-item" *ngFor="let request of leaveRequests">
+        <div class="leave-info">
+          <div class="leave-dates">
+            📅 {{ formatDate(request.start_date) }} → {{ formatDate(request.end_date) }}
+          </div>
+          <div class="leave-type">{{ request.type }}</div>
+          <div class="leave-reason">{{ request.reason }}</div>
+        </div>
+        <div class="leave-status" [ngClass]="request.statuts.toLowerCase()">
+          {{ getLeaveStatusLabel(request.statuts) }}
+        </div>
+      </div>
+      
+      <div class="empty-state" *ngIf="leaveRequests.length === 0">
+        <span class="empty-icon">📅</span>
+        <p>Aucune demande de congé</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Action Buttons -->
+  <div class="fab-buttons">
+    <button class="fab-btn" (click)="refreshData()" [class.loading]="isLoading" title="Rafraîchir">
+      🔄
+    </button>
+  </div>
+
+  <!-- Leave Request Modal -->
+  <div class="modal" [class.show]="showLeaveModal" (click)="closeModal($event)">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Nouvelle demande de congé</h3>
+        <button class="close-btn" (click)="closeLeaveModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Type de congé</label>
+          <select [(ngModel)]="newLeave.type">
+            <option value="ANNUAL">Congés annuels</option>
+            <option value="SICK">Congés maladie</option>
+            <option value="PERSONAL">Congés personnels</option>
+            <option value="UNPAID">Congés sans solde</option>
+          </select>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Date début</label>
+            <input type="date" [(ngModel)]="newLeave.start_date">
+          </div>
+          <div class="form-group">
+            <label>Date fin</label>
+            <input type="date" [(ngModel)]="newLeave.end_date">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Raison</label>
+          <textarea [(ngModel)]="newLeave.reason" rows="3" placeholder="Décrivez la raison de votre demande..."></textarea>
+        </div>
+        
+        <div class="form-group" *ngIf="leaveValidationErrors.length > 0">
+          <div class="error-messages">
+            <div *ngFor="let error of leaveValidationErrors" class="error">
+              ⚠️ {{ error }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeLeaveModal()">Annuler</button>
+        <button class="btn-submit" (click)="submitLeaveRequest()" [disabled]="!canSubmitLeave()">
+          Envoyer la demande
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div class="notification" [class.show]="showNotification" [ngClass]="notificationType">
+    <span class="notification-icon">{{ notificationIcon }}</span>
+    <span class="notification-message">{{ notificationMessage }}</span>
+  </div>
+</div>
