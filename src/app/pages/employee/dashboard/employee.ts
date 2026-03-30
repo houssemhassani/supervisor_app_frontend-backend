@@ -128,6 +128,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   
   private breakInterval: any;
   private refreshSubscription?: Subscription;
+  private tasksSubscription?: Subscription;
   
   constructor(
     private apiService: EmployeeApiService,
@@ -152,6 +153,9 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.refreshSubscription) {
       this.refreshSubscription.unsubscribe();
+    }
+    if (this.tasksSubscription) {
+      this.tasksSubscription.unsubscribe();
     }
     if (this.breakInterval) {
       clearInterval(this.breakInterval);
@@ -247,7 +251,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
           this.attendanceId = data.attendance?.id || null;
           this.attendanceStatus = data.attendance?.status || 'ABSENT';
           
-          // Mettre à jour l'affichage du statut
           this.updateStatusDisplay(this.attendanceStatus);
           
           console.log('📅 État:', { 
@@ -379,8 +382,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         }
         
         const workHours = response.data?.workHours || 0;
-        
-        // Mettre à jour l'affichage du statut
         this.updateStatusDisplay(this.attendanceStatus);
         
         let statusMessage = '';
@@ -500,65 +501,88 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   
   // ========== STATISTIQUES ==========
   
-  loadWeeklyStats(): void {
-    if (!this.isAuthenticated()) {
-      this.loadMockWeeklyStats();
-      return;
-    }
-    
-    this.apiService.getWeeklyStats().pipe(
-      catchError((error) => {
-        console.error('❌ Erreur chargement stats:', error);
-        this.loadMockWeeklyStats();
-        return of(null);
-      })
-    ).subscribe((response: any) => {
-      if (response && response.success) {
-        const data = response.data;
-        this.weeklyData.datasets[0].data = [
-          data.daily?.monday || 0,
-          data.daily?.tuesday || 0,
-          data.daily?.wednesday || 0,
-          data.daily?.thursday || 0,
-          data.daily?.friday || 0,
-          data.daily?.saturday || 0
-        ];
-        this.weeklyData = { ...this.weeklyData };
-      }
-    });
-  }
-  
   loadMockWeeklyStats(): void {
     this.weeklyData.datasets[0].data = [7.5, 8, 6.5, 8.5, 7, 0];
     this.weeklyData = { ...this.weeklyData };
   }
   
-  // ========== TÂCHES ==========
+  // ========== TÂCHES AVEC DÉDOUBLONNAGE ==========
   
   loadTasks(): void {
+    // Annuler la précédente requête
+    if (this.tasksSubscription) {
+      this.tasksSubscription.unsubscribe();
+    }
+    
     if (!this.isAuthenticated()) {
       this.loadMockTasks();
       return;
     }
     
     const userId = this.user?.id || 1;
+    console.log('🔄 [loadTasks] Chargement des tâches pour userId:', userId);
     
-    this.apiService.getTasks(userId).pipe(
-      catchError((error) => {
+    this.tasksSubscription = this.apiService.getTasks(userId).subscribe({
+      next: (response: any) => {
+        console.log('✅ [loadTasks] Réponse reçue:', response);
+        
+        // Extraire les tâches de la réponse
+        let rawTasks: any[] = [];
+        
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            rawTasks = response.data;
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            rawTasks = response.data.data;
+          } else if (response.data.attributes) {
+            rawTasks = [response.data];
+          }
+        }
+        
+        console.log(`📋 Nombre de tâches brutes: ${rawTasks.length}`);
+        
+        // 🔥 DÉDOUBLONNAGE PAR ID
+        const uniqueTasksMap = new Map<number, any>();
+        rawTasks.forEach(task => {
+          if (task && task.id && !uniqueTasksMap.has(task.id)) {
+            uniqueTasksMap.set(task.id, task);
+          }
+        });
+        
+        const uniqueTasks = Array.from(uniqueTasksMap.values());
+        console.log(`📋 Après dédoublonnage: ${uniqueTasks.length} tâches uniques`);
+        
+        // Filtrer par utilisateur assigné
+        this.tasks = uniqueTasks.filter((task: any) => {
+          const assignedTo = task.assigned_to;
+          if (!assignedTo) return false;
+          
+          if (typeof assignedTo === 'object') {
+            return assignedTo.id === userId;
+          }
+          if (typeof assignedTo === 'number') {
+            return assignedTo === userId;
+          }
+          return false;
+        });
+        
+        console.log(`📋 Après filtrage utilisateur: ${this.tasks.length} tâches`);
+        
+        // Trier par date d'échéance
+        this.tasks.sort((a, b) => {
+          if (a.due_date && b.due_date) {
+            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+          }
+          return 0;
+        });
+        
+        this.filterTasks();
+        this.updateTaskStats();
+      },
+      error: (error) => {
         console.error('❌ Erreur chargement tâches:', error);
         this.loadMockTasks();
-        return of(null);
-      })
-    ).subscribe((response: any) => {
-      if (response && response.data) {
-        this.tasks = response.data;
-      } else if (response && response.data?.data) {
-        this.tasks = response.data.data;
-      } else {
-        this.loadMockTasks();
       }
-      this.filterTasks();
-      this.updateTaskStats();
     });
   }
   
@@ -620,16 +644,48 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     
     const userId = this.user?.id || 1;
     
-    this.apiService.getLeaveRequests(userId).pipe(
-      catchError((error) => {
-        console.error('❌ Erreur chargement congés:', error);
+    this.apiService.getLeaveRequests(userId).subscribe({
+      next: (response) => {
+        if (response && response.data) {
+          this.leaveRequests = response.data;
+          this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
+        }
+      },
+      error: (error) => {
+        if (error.status !== 401) {
+          console.error('❌ Erreur chargement congés:', error);
+        }
         this.loadMockLeaveRequests();
-        return of(null);
-      })
-    ).subscribe((response: any) => {
-      if (response && response.data) {
-        this.leaveRequests = response.data;
-        this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
+      }
+    });
+  }
+  
+  loadWeeklyStats(): void {
+    if (!this.isAuthenticated()) {
+      this.loadMockWeeklyStats();
+      return;
+    }
+    
+    this.apiService.getWeeklyStats().subscribe({
+      next: (response) => {
+        if (response && response.success) {
+          const data = response.data;
+          this.weeklyData.datasets[0].data = [
+            data.daily?.monday || 0,
+            data.daily?.tuesday || 0,
+            data.daily?.wednesday || 0,
+            data.daily?.thursday || 0,
+            data.daily?.friday || 0,
+            data.daily?.saturday || 0
+          ];
+          this.weeklyData = { ...this.weeklyData };
+        }
+      },
+      error: (error) => {
+        if (error.status !== 401) {
+          console.error('❌ Erreur chargement stats:', error);
+        }
+        this.loadMockWeeklyStats();
       }
     });
   }
@@ -752,9 +808,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     }, 500);
   }
   
-  /**
-   * Met à jour l'affichage du statut
-   */
   updateStatusDisplay(status: string): void {
     let statusText = '';
     let statusClass = '';

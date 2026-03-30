@@ -4,6 +4,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, tap, catchError, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from '../core/services/AuthService/auth';
+import { HttpParams } from '@angular/common/http';
 
 @Injectable({
   providedIn: 'root'
@@ -18,52 +19,27 @@ export class EmployeeApiService {
     console.log('🔧 [EmployeeApiService] Service créé');
   }
 
-  /**
-   * Récupère les headers avec le token JWT
-   */
-  private getHeaders(): HttpHeaders {
-    let token = localStorage.getItem('token');
-    
-    // Backup: chercher dans jwt
-    if (!token) {
-      token = localStorage.getItem('jwt');
-    }
-    
-    // Backup: chercher dans authData
-    if (!token) {
-      const authDataStr = localStorage.getItem('authData');
-      if (authDataStr) {
-        try {
-          const authData = JSON.parse(authDataStr);
-          token = authData.jwt;
-          if (token) {
-            localStorage.setItem('token', token);
-            localStorage.setItem('jwt', token);
-          }
-        } catch (e) {
-          console.error('Erreur parsing authData:', e);
-        }
-      }
-    }
-    
-    console.log('🔑 [getHeaders] Token trouvé:', token ? 'OUI' : 'NON');
-    console.log('🔑 [getHeaders] Début du token:', token ? token.substring(0, 50) + '...' : 'NON');
-    
-    if (!token) {
-      return new HttpHeaders({
-        'Content-Type': 'application/json'
-      });
-    }
-    
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`,
+ // Dans getHeaders() de employee.ts
+private getHeaders(): HttpHeaders {
+  const token = localStorage.getItem('token') || localStorage.getItem('jwt');
+  
+  console.log('🔑 Token trouvé:', token ? 'OUI' : 'NON');
+  if (token) {
+    console.log('🔑 Début du token:', token.substring(0, 30) + '...');
+  }
+  
+  if (!token) {
+    console.warn('⚠️ Aucun token trouvé dans le localStorage');
+    return new HttpHeaders({
       'Content-Type': 'application/json'
     });
-    
-    console.log('🔑 [getHeaders] Header Authorization:', headers.get('Authorization')?.substring(0, 60) + '...');
-    
-    return headers;
   }
+  
+  return new HttpHeaders({
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  });
+}
 
   isAuthenticated(): boolean {
     const token = localStorage.getItem('token');
@@ -122,15 +98,24 @@ export class EmployeeApiService {
 
   // ========== TASKS ==========
   
-  getTasks(userId?: number): Observable<any> {
-    let url = `${this.apiUrl}/tasks?populate=*&sort=due_date:asc`;
-    if (userId) {
-      url += `&filters[assigned_to][id][$eq]=${userId}`;
-    }
-    console.log('📡 [API] GET', url);
-    const headers = this.getHeaders();
-    return this.http.get(url, { headers });
-  }
+  
+// src/app/services/employee.ts
+getUserTasks(): Observable<any> {
+  const url = `${this.apiUrl}/tasks/user`;
+  console.log('📡 [API] GET', url);
+  const headers = this.getHeaders();
+  return this.http.get(url, { headers });
+}
+
+// src/app/services/employee.ts
+// src/app/services/employee.ts
+// src/app/services/employee.ts
+getTasks(userId?: number): Observable<any> {
+  const url = `${this.apiUrl}/tasks?sort=due_date:asc`;
+  console.log('📡 [API] GET', url, 'à', new Date().toLocaleTimeString());
+  const headers = this.getHeaders();
+  return this.http.get(url, { headers });
+}
 
   updateTaskStatus(taskId: number, status: string): Observable<any> {
     console.log(`📡 [API] PUT /tasks/${taskId}`);
