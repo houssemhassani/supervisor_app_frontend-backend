@@ -127,21 +127,36 @@ getTasks(userId?: number): Observable<any> {
 
   // ========== LEAVE REQUESTS ==========
   
-  getLeaveRequests(userId?: number): Observable<any> {
-    let url = `${this.apiUrl}/leave-requests?populate=*&sort=createdAt:desc`;
-    if (userId) {
-      url += `&filters[user][id][$eq]=${userId}`;
-    }
-    console.log('📡 [API] GET', url);
-    const headers = this.getHeaders();
-    return this.http.get(url, { headers });
+  // src/app/services/employee.ts
+getLeaveRequests(userId?: number): Observable<any> {
+  let url = `${this.apiUrl}/leave-requests?sort=createdAt:desc`;
+  
+  // ❌ SUPPRIMER ÇA
+  // if (userId) {
+  //   url += `&filters[user][id][$eq]=${userId}`;
+  // }
+
+  const headers = this.getHeaders();
+  return this.http.get(url, { headers });
+}
+
+createLeaveRequest(data: any): Observable<any> {
+  const token = localStorage.getItem('token');
+  console.log('token',token);
+  if (!token) {
+    console.error('⚠️ Aucun token trouvé, utilisateur non connecté');
+    return throwError(() => new Error('Utilisateur non connecté'));
   }
 
-  createLeaveRequest(data: any): Observable<any> {
-    console.log('📡 [API] POST /leave-requests');
-    const headers = this.getHeaders();
-    return this.http.post(`${this.apiUrl}/leave-requests`, { data }, { headers });
-  }
+  const headers = new HttpHeaders({
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  });
+
+  console.log('📡 POST /leave-requests avec token:', token.substring(0, 20) + '...');
+
+  return this.http.post(`${this.apiUrl}/leave-requests`, { data }, { headers });
+}
 
   cancelLeaveRequest(id: number): Observable<any> {
     console.log(`📡 [API] DELETE /leave-requests/${id}`);

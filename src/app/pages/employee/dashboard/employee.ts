@@ -697,43 +697,60 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
   }
   
-  submitLeaveRequest(): void {
-    if (!this.validateLeaveForm()) return;
-    
-    if (!this.isAuthenticated()) {
-      this.showNotificationMessage('Veuillez vous connecter', 'error');
-      return;
-    }
-    
-    this.isLoading = true;
-    
-    const leaveData = {
-      type: this.newLeave.type,
-      start_date: this.newLeave.start_date,
-      end_date: this.newLeave.end_date,
-      reason: this.newLeave.reason,
-      statuts: 'PENDING',
-      user: this.user?.id || 1
-    };
-    
-    this.apiService.createLeaveRequest(leaveData).pipe(
-      catchError((error) => {
-        console.error('❌ Erreur création demande:', error);
-        this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
-        return of(null);
-      }),
-      finalize(() => {
-        this.isLoading = false;
-      })
-    ).subscribe((response: any) => {
-      if (response && response.data) {
-        this.leaveRequests.unshift(response.data);
-        this.pendingRequests++;
-        this.showNotificationMessage('Demande de congé envoyée!', 'success');
-        this.closeLeaveModal();
-      }
-    });
+submitLeaveRequest(): void {
+
+  if (!this.validateLeaveForm()) return;
+
+  if (!this.isAuthenticated()) {
+    this.showNotificationMessage('Veuillez vous connecter', 'error');
+    return;
   }
+
+  this.isLoading = true;
+
+  const leaveData = {
+    type: this.newLeave.type,
+    start_date: this.newLeave.start_date,
+    end_date: this.newLeave.end_date,
+    reason: this.newLeave.reason || ''
+  };
+
+  console.log("📤 Données envoyées :", leaveData);
+
+  this.apiService.createLeaveRequest(leaveData).pipe(
+
+    catchError((error) => {
+      console.error('❌ Erreur création demande:', error.error);
+      this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
+      return of(null);
+    }),
+
+    finalize(() => {
+      this.isLoading = false;
+    })
+
+  ).subscribe((response: any) => {
+
+    if (!response || !response.data) return;
+
+    this.leaveRequests.unshift(response.data);
+    this.pendingRequests++;
+
+    this.showNotificationMessage('Demande de congé envoyée avec succès', 'success');
+
+    this.closeLeaveModal();
+
+    // reset form
+    this.newLeave = {
+      type: '',
+      start_date: '',
+      end_date: '',
+      reason: ''
+    };
+
+  });
+
+}
   
   validateLeaveForm(): boolean {
     this.leaveValidationErrors = [];
