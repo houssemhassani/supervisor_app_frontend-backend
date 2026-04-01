@@ -141,21 +141,73 @@ getLeaveRequests(userId?: number): Observable<any> {
 }
 
 createLeaveRequest(data: any): Observable<any> {
-  const token = localStorage.getItem('token');
-  console.log('token',token);
+  // Récupérer le token
+  const token = localStorage.getItem('token') || localStorage.getItem('jwt');
+  
   if (!token) {
-    console.error('⚠️ Aucun token trouvé, utilisateur non connecté');
+    console.error('❌ Aucun token trouvé');
+    return throwError(() => new Error('Non connecté'));
+  }
+  
+  // 🔥 RÉCUPÉRER L'USER ID DE L'UTILISATEUR CONNECTÉ
+  let userId = null;
+  
+  // Méthode 1: Depuis localStorage
+  const userStr = localStorage.getItem('user');
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      userId = user.id;
+      console.log('👤 User ID du localStorage:', userId);
+    } catch(e) {
+      console.error('Erreur parsing user:', e);
+    }
+  }
+  
+  // Méthode 2: Depuis le token JWT
+  if (!userId && token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      userId = payload.id;
+      console.log('👤 User ID du token:', userId);
+    } catch(e) {
+      console.error('Erreur décodage token:', e);
+    }
+  }
+  
+  // 🔥 SI TOUJOURS PAS D'ID, ERREUR
+  if (!userId) {
+    console.error('❌ Impossible de récupérer l\'ID utilisateur');
     return throwError(() => new Error('Utilisateur non connecté'));
   }
-
+  
+  console.log('🔑 Envoi avec userId:', userId);
+  
   const headers = new HttpHeaders({
-    Authorization: `Bearer ${token}`,
+    'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'
   });
 
-  console.log('📡 POST /leave-requests avec token:', token.substring(0, 20) + '...');
+  // 🔥 ENVOYER L'USER ID DANS LE PAYLOAD
+  const payload = {
+    data: {
+      type: data.type,
+      start_date: data.start_date,
+      end_date: data.end_date,
+      reason: data.reason,
+      userId: userId  // ← ENVOI DE L'USER ID
+    }
+  };
 
-  return this.http.post(`${this.apiUrl}/leave-requests`, { data }, { headers });
+  console.log('📡 Payload envoyé:', JSON.stringify(payload, null, 2));
+  
+  return this.http.post(`${this.apiUrl}/leave-requests`, payload, { headers }).pipe(
+    tap(response => console.log('✅ Succès:', response)),
+    catchError(error => {
+      console.error('❌ Erreur:', error);
+      return throwError(() => error);
+    })
+  );
 }
 
   cancelLeaveRequest(id: number): Observable<any> {

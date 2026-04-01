@@ -698,13 +698,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   }
   
 submitLeaveRequest(): void {
-
   if (!this.validateLeaveForm()) return;
-
-  if (!this.isAuthenticated()) {
-    this.showNotificationMessage('Veuillez vous connecter', 'error');
-    return;
-  }
 
   this.isLoading = true;
 
@@ -717,39 +711,38 @@ submitLeaveRequest(): void {
 
   console.log("📤 Données envoyées :", leaveData);
 
-  this.apiService.createLeaveRequest(leaveData).pipe(
-
-    catchError((error) => {
-      console.error('❌ Erreur création demande:', error.error);
-      this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
-      return of(null);
-    }),
-
-    finalize(() => {
+  this.apiService.createLeaveRequest(leaveData).subscribe({
+    next: (response: any) => {
+      console.log('✅ Réponse complète:', response);
+      console.log('✅ Data:', response.data);
+      console.log('👤 User ID dans la réponse:', response.data?.user);
+      
+      // Vérifier que la réponse contient bien le user
+      if (response.data && response.data.user) {
+        console.log('✅ Demande créée pour l\'utilisateur ID:', response.data.user);
+      } else {
+        console.warn('⚠️ La réponse ne contient pas le champ user');
+        console.log('📊 Structure de la réponse:', Object.keys(response.data || {}));
+      }
+      
+      this.leaveRequests.unshift(response.data);
+      this.pendingRequests++;
+      this.showNotificationMessage('Demande de congé envoyée avec succès', 'success');
+      this.closeLeaveModal();
+      this.newLeave = {
+        type: 'ANNUAL',
+        start_date: '',
+        end_date: '',
+        reason: ''
+      };
       this.isLoading = false;
-    })
-
-  ).subscribe((response: any) => {
-
-    if (!response || !response.data) return;
-
-    this.leaveRequests.unshift(response.data);
-    this.pendingRequests++;
-
-    this.showNotificationMessage('Demande de congé envoyée avec succès', 'success');
-
-    this.closeLeaveModal();
-
-    // reset form
-    this.newLeave = {
-      type: '',
-      start_date: '',
-      end_date: '',
-      reason: ''
-    };
-
+    },
+    error: (error) => {
+      console.error('❌ Erreur:', error);
+      this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
+      this.isLoading = false;
+    }
   });
-
 }
   
   validateLeaveForm(): boolean {
