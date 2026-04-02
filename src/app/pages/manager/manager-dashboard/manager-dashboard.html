@@ -1,0 +1,236 @@
+<div class="manager-dashboard">
+
+  <!-- HEADER -->
+  <div class="dashboard-header">
+    <div class="header-left">
+      <div class="icon">
+        <mat-icon>dashboard</mat-icon>
+      </div>
+      <div>
+        <h1>Dashboard Manager</h1>
+        <p>Suivi des congés et demandes</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button mat-raised-button color="primary" (click)="openCreateDialog()">
+        <mat-icon>add</mat-icon>
+        Nouvelle demande
+      </button>
+
+      <button mat-stroked-button (click)="refreshData()" [disabled]="isRefreshing">
+        <mat-icon [class.spin]="isRefreshing">refresh</mat-icon>
+        {{ isRefreshing ? 'Chargement...' : 'Actualiser' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-grid" *ngIf="stats && !isLoading">
+
+    <div class="stat-card">
+      <mat-icon>event_note</mat-icon>
+      <div>
+        <h2>{{ stats.total }}</h2>
+        <p>Total</p>
+      </div>
+    </div>
+
+    <div class="stat-card pending">
+      <mat-icon>hourglass_empty</mat-icon>
+      <div>
+        <h2>{{ stats.pending }}</h2>
+        <p>En attente</p>
+      </div>
+    </div>
+
+    <div class="stat-card approved">
+      <mat-icon>check_circle</mat-icon>
+      <div>
+        <h2>{{ stats.approved }}</h2>
+        <p>Approuvées</p>
+      </div>
+    </div>
+
+    <div class="stat-card rejected">
+      <mat-icon>cancel</mat-icon>
+      <div>
+        <h2>{{ stats.rejected }}</h2>
+        <p>Rejetées</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <mat-icon>calendar_today</mat-icon>
+      <div>
+        <h2>{{ stats.totalDaysApproved }}</h2>
+        <p>Jours validés</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <mat-icon>schedule</mat-icon>
+      <div>
+        <h2>{{ getAverageResponseTime() }}</h2>
+        <p>Temps réponse</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CHART + TYPES -->
+  <div class="charts-section" *ngIf="stats && !isLoading">
+
+    <!-- CHART -->
+    <div class="chart-card">
+      <div class="card-header">
+        <mat-icon>pie_chart</mat-icon>
+        <h3>Répartition des demandes</h3>
+      </div>
+
+      
+    </div>
+
+    <!-- TYPES -->
+    <div class="types-card">
+      <div class="card-header">
+        <mat-icon>category</mat-icon>
+        <h3>Types de congés</h3>
+      </div>
+
+      <div class="types-list">
+
+        <div class="type-item">
+          <span>🏖️ Annuel</span>
+          <div class="bar">
+            <div class="fill"
+              [style.width.%]="(stats.byType.ANNUAL / stats.total) * 100">
+            </div>
+          </div>
+          <span>{{ stats.byType.ANNUAL }}</span>
+        </div>
+
+        <div class="type-item">
+          <span>🤒 Maladie</span>
+          <div class="bar">
+            <div class="fill sick"
+              [style.width.%]="(stats.byType.SICK / stats.total) * 100">
+            </div>
+          </div>
+          <span>{{ stats.byType.SICK }}</span>
+        </div>
+
+        <div class="type-item">
+          <span>👤 Personnel</span>
+          <div class="bar">
+            <div class="fill personal"
+              [style.width.%]="(stats.byType.PERSONAL / stats.total) * 100">
+            </div>
+          </div>
+          <span>{{ stats.byType.PERSONAL }}</span>
+        </div>
+
+        <div class="type-item">
+          <span>💰 Sans solde</span>
+          <div class="bar">
+            <div class="fill unpaid"
+              [style.width.%]="(stats.byType.UNPAID / stats.total) * 100">
+            </div>
+          </div>
+          <span>{{ stats.byType.UNPAID }}</span>
+        </div>
+
+        <div class="type-item">
+          <span>👶 Maternité</span>
+          <div class="bar">
+            <div class="fill maternity"
+              [style.width.%]="(stats.byType.MATERNITY / stats.total) * 100">
+            </div>
+          </div>
+          <span>{{ stats.byType.MATERNITY }}</span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+
+    <div class="tabs-header">
+
+      <button
+        [class.active]="activeTab === 'myRequests'"
+        (click)="switchTab('myRequests')">
+
+        <mat-icon>person</mat-icon>
+        Mes demandes
+
+       
+      </button>
+
+      <button
+        [class.active]="activeTab === 'allRequests'"
+        (click)="switchTab('allRequests')">
+
+        <mat-icon>people</mat-icon>
+        Toutes
+
+        <span *ngIf="getTotalPendingActions()" class="badge warning">
+          {{ getTotalPendingActions() }}
+        </span>
+      </button>
+
+    </div>
+
+    <!-- CONTENT -->
+    <div class="tabs-content">
+
+      <!-- MY REQUESTS -->
+      <div *ngIf="activeTab === 'myRequests'">
+
+        <app-leave-request-list
+          title="Mes demandes"
+          [requests]="myLeaveRequests"
+          [showActions]="true"
+          [showManagerActions]="false"
+          [showUserInfo]="false"
+          [showFilters]="true"
+          [showStats]="true"
+          (onEdit)="openEditDialog($event)"
+          (onDelete)="deleteLeaveRequest($event)"
+          (onViewDetails)="openViewDialog($event)"
+          (onCancel)="cancelRequest($event)">
+        </app-leave-request-list>
+
+      </div>
+
+      <!-- ALL REQUESTS -->
+      <div *ngIf="activeTab === 'allRequests'">
+
+        <app-leave-request-list
+          title="Toutes les demandes"
+          [requests]="allLeaveRequests"
+          [showActions]="true"
+          [showManagerActions]="true"
+          [showUserInfo]="true"
+          [showFilters]="true"
+          [showStats]="true"
+          (onViewDetails)="openViewDialog($event)"
+          (onApprove)="approveRequest($event)"
+          (onReject)="rejectRequest($event)">
+        </app-leave-request-list>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading" *ngIf="isLoading">
+    <mat-spinner></mat-spinner>
+    <p>Chargement...</p>
+  </div>
+
+</div>

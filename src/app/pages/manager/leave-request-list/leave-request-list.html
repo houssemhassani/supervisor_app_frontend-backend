@@ -1,0 +1,266 @@
+<!-- leave-request-list.component.html -->
+<div class="leave-request-list">
+  
+  <!-- En-tête avec titre et statistiques -->
+  <div class="list-header">
+    <div class="header-left">
+      <h3>
+        <mat-icon aria-label="Icône de demande de congé">event_note</mat-icon>
+        {{ title }}
+      </h3>
+      <span class="total-count">{{ requests.length }} demande{{ requests.length > 1 ? 's' : '' }}</span>
+    </div>
+    
+    <div class="stats-badge" *ngIf="showStats">
+      <div class="stat-item pending" [matTooltip]="getStatusCount('PENDING') + ' en attente'">
+        <mat-icon aria-label="En attente">hourglass_empty</mat-icon>
+        <span>{{ getStatusCount('PENDING') }}</span>
+      </div>
+      <div class="stat-item approved" [matTooltip]="getStatusCount('APPROVED') + ' approuvées'">
+        <mat-icon aria-label="Approuvé">check_circle</mat-icon>
+        <span>{{ getStatusCount('APPROVED') }}</span>
+      </div>
+      <div class="stat-item rejected" [matTooltip]="getStatusCount('REJECTED') + ' rejetées'">
+        <mat-icon aria-label="Rejeté">cancel</mat-icon>
+        <span>{{ getStatusCount('REJECTED') }}</span>
+      </div>
+      <div class="stat-item cancelled" [matTooltip]="getStatusCount('CANCELLED') + ' annulées'">
+        <mat-icon aria-label="Annulé">block</mat-icon>
+        <span>{{ getStatusCount('CANCELLED') }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barre de progression -->
+  <div class="progress-bar" *ngIf="showStats && requests.length > 0">
+    <div class="progress-fill" [style.width.%]="getProgressValue()" [matTooltip]="getProgressValue().toFixed(0) + '% approuvées'">
+      <span *ngIf="getProgressValue() > 10">{{ getProgressValue().toFixed(0) }}%</span>
+    </div>
+  </div>
+
+  <!-- Filtres -->
+  <div class="filters-section" *ngIf="showFilters">
+    <div class="filters-row">
+      <!-- Recherche -->
+      <mat-form-field appearance="outline" class="filter-search">
+        <mat-label>Rechercher</mat-label>
+        <input matInput [(ngModel)]="searchTerm" (ngModelChange)="onFilterChange()" 
+               placeholder="Nom, email, motif...">
+        <mat-icon matSuffix aria-label="Rechercher">search</mat-icon>
+      </mat-form-field>
+
+      <!-- Filtre statut -->
+      <mat-form-field appearance="outline" class="filter-select">
+        <mat-label>Statut</mat-label>
+        <mat-select [(ngModel)]="selectedStatus" (ngModelChange)="onFilterChange()">
+          <mat-option *ngFor="let status of statuses" [value]="status.value">
+            <div class="status-option">
+              <mat-icon [style.color]="status.color" aria-hidden="true">{{ status.icon }}</mat-icon>
+              <span>{{ status.label }}</span>
+            </div>
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <!-- Filtre type -->
+      <mat-form-field appearance="outline" class="filter-select">
+        <mat-label>Type de congé</mat-label>
+        <mat-select [(ngModel)]="selectedType" (ngModelChange)="onFilterChange()">
+          <mat-option *ngFor="let type of leaveTypes" [value]="type.value">
+            {{ type.label }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <!-- Bouton reset -->
+      <button mat-stroked-button (click)="clearFilters()" class="reset-btn" *ngIf="selectedStatus !== 'ALL' || selectedType !== 'ALL' || searchTerm">
+        <mat-icon aria-label="Réinitialiser">clear</mat-icon>
+        Réinitialiser
+      </button>
+    </div>
+
+    <!-- Tri -->
+    <div class="sort-section">
+      <span class="sort-label">Trier par :</span>
+      <div class="sort-buttons">
+        <button mat-button [class.active]="sortBy === 'created_at'" (click)="changeSort('created_at')">
+          Date
+          <mat-icon *ngIf="sortBy === 'created_at'" aria-hidden="true">{{ sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+        </button>
+        <button mat-button [class.active]="sortBy === 'start_date'" (click)="changeSort('start_date')">
+          Date début
+          <mat-icon *ngIf="sortBy === 'start_date'" aria-hidden="true">{{ sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+        </button>
+        <button mat-button [class.active]="sortBy === 'duration_days'" (click)="changeSort('duration_days')">
+          Durée
+          <mat-icon *ngIf="sortBy === 'duration_days'" aria-hidden="true">{{ sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+        </button>
+        <button mat-button [class.active]="sortBy === 'user'" (click)="changeSort('user')">
+          Employé
+          <mat-icon *ngIf="sortBy === 'user'" aria-hidden="true">{{ sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Liste des demandes -->
+  <div class="requests-container" *ngIf="paginatedRequests.length > 0; else noData">
+    <div class="request-card" *ngFor="let request of paginatedRequests" 
+         [class]="request.statuts.toLowerCase()">
+      
+      <!-- En-tête de la carte -->
+      <div class="card-header">
+        <div class="request-info">
+          <div class="request-type">
+            <mat-icon [matTooltip]="getTypeLabel(request.type)" aria-label="Type de congé">{{ getTypeIcon(request.type) }}</mat-icon>
+            <span>{{ getTypeLabel(request.type) }}</span>
+          </div>
+          <div class="request-status">
+            <span class="status-badge" [class]="request.statuts.toLowerCase()">
+              <mat-icon aria-label="Statut">{{ getStatusIcon(request.statuts) }}</mat-icon>
+              {{ getStatusLabel(request.statuts) }}
+            </span>
+          </div>
+        </div>
+        
+        <div class="request-actions" *ngIf="showActions">
+          <button mat-icon-button color="primary" (click)="onViewDetails.emit(request)" 
+                  [matTooltip]="tooltipTexts.view">
+            <mat-icon aria-label="Voir détails">visibility</mat-icon>
+          </button>
+          
+          <button mat-icon-button color="accent" (click)="onEdit.emit(request)" 
+                  *ngIf="canEdit(request)" [matTooltip]="tooltipTexts.edit">
+            <mat-icon aria-label="Modifier">edit</mat-icon>
+          </button>
+          
+          <button mat-icon-button color="warn" (click)="onDelete.emit(request)" 
+                  *ngIf="canDelete(request)" [matTooltip]="tooltipTexts.delete">
+            <mat-icon aria-label="Supprimer">delete</mat-icon>
+          </button>
+          
+          <button mat-icon-button (click)="onCancel.emit(request)" 
+                  *ngIf="canCancel(request)" [matTooltip]="tooltipTexts.cancel">
+            <mat-icon aria-label="Annuler">block</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <!-- Corps de la carte -->
+      <div class="card-body">
+        <!-- Informations utilisateur -->
+        <div class="user-info" *ngIf="showUserInfo && request.user">
+          <div class="user-avatar" [style.background-color]="'#' + getRandomColor(request.user.email)">
+            {{ getInitials(request.user.username || request.user.email) }}
+          </div>
+          <div class="user-details">
+            <strong>{{ request.user.username || 'Utilisateur' }}</strong>
+            <small>{{ request.user.email }}</small>
+          </div>
+        </div>
+
+        <!-- Période -->
+        <div class="period-info">
+          <div class="date-range">
+            <mat-icon aria-label="Date">event</mat-icon>
+            <div class="date-details">
+              <span class="date-label">Du</span>
+              <span class="date-value">{{ formatDate(request.start_date) }}</span>
+            </div>
+            <mat-icon class="arrow-icon" aria-label="Au">arrow_forward</mat-icon>
+            <div class="date-details">
+              <span class="date-label">Au</span>
+              <span class="date-value">{{ formatDate(request.end_date) }}</span>
+            </div>
+          </div>
+          
+          <div class="duration">
+            <mat-icon aria-label="Durée">schedule</mat-icon>
+            <span class="duration-value">{{ request.duration_days }} jour{{ request.duration_days > 1 ? 's' : '' }}</span>
+          </div>
+        </div>
+
+        <!-- Raison -->
+        <div class="reason" *ngIf="request.reason">
+          <mat-icon aria-label="Motif">description</mat-icon>
+          <div class="reason-text">
+            <span class="reason-label">Motif :</span>
+            <span>{{ request.reason }}</span>
+          </div>
+        </div>
+
+        <!-- Commentaire manager -->
+        <div class="manager-comments" *ngIf="request.manager_comments">
+          <mat-icon aria-label="Commentaire">comment</mat-icon>
+          <div class="comments-content">
+            <span class="comments-label">Commentaire :</span>
+            <span>{{ request.manager_comments }}</span>
+          </div>
+        </div>
+
+        <!-- Date de création - CORRECTION : utiliser seulement created_at -->
+        <div class="meta-info" *ngIf="request.created_at">
+          <mat-icon aria-label="Date de création">access_time</mat-icon>
+          <span>Demandé le {{ formatDateTime(request.created_at) }}</span>
+        </div>
+      </div>
+
+      <!-- Actions manager -->
+      <div class="card-footer" *ngIf="showManagerActions && request.statuts === 'PENDING'">
+        <button mat-raised-button class="approve-btn" (click)="onApprove.emit(request)">
+          <mat-icon aria-label="Approuver">check_circle</mat-icon>
+          Approuver
+        </button>
+        <button mat-stroked-button class="reject-btn" (click)="onReject.emit(request)">
+          <mat-icon aria-label="Rejeter">cancel</mat-icon>
+          Rejeter
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" *ngIf="showPagination && totalPages > 1">
+    <button mat-icon-button [disabled]="currentPage === 1" (click)="changePage(1)">
+      <mat-icon aria-label="Première page">first_page</mat-icon>
+    </button>
+    <button mat-icon-button [disabled]="currentPage === 1" (click)="changePage(currentPage - 1)">
+      <mat-icon aria-label="Page précédente">chevron_left</mat-icon>
+    </button>
+    
+    <div class="page-numbers">
+      <button *ngFor="let page of getPageNumbers()" 
+              mat-button 
+              [class.active]="page === currentPage"
+              (click)="changePage(page)">
+        {{ page }}
+      </button>
+    </div>
+    
+    <button mat-icon-button [disabled]="currentPage === totalPages" (click)="changePage(currentPage + 1)">
+      <mat-icon aria-label="Page suivante">chevron_right</mat-icon>
+    </button>
+    <button mat-icon-button [disabled]="currentPage === totalPages" (click)="changePage(totalPages)">
+      <mat-icon aria-label="Dernière page">last_page</mat-icon>
+    </button>
+    
+    <span class="page-info">
+      Page {{ currentPage }} sur {{ totalPages }}
+      ({{ filteredRequests.length }} résultats)
+    </span>
+  </div>
+
+  <!-- Message aucun résultat -->
+  <ng-template #noData>
+    <div class="no-data">
+      <mat-icon aria-label="Aucune donnée">inbox</mat-icon>
+      <h4>Aucune demande trouvée</h4>
+      <p>Aucune demande de congé ne correspond à vos critères</p>
+      <button mat-raised-button (click)="clearFilters()" *ngIf="selectedStatus !== 'ALL' || selectedType !== 'ALL' || searchTerm">
+        <mat-icon aria-label="Rafraîchir">refresh</mat-icon>
+        Réinitialiser les filtres
+      </button>
+    </div>
+  </ng-template>
+
+</div>

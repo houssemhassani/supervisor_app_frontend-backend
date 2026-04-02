@@ -1,0 +1,32 @@
+<!-- confirmation-dialog.component.html -->
+<div class="confirmation-dialog" [class]="data.type">
+  
+  <div class="dialog-header" [ngStyle]="{'border-bottom-color': getIconColor()}">
+    <div class="header-icon" [ngStyle]="{'background-color': getIconColor()}">
+      <mat-icon>{{ data.icon }}</mat-icon>
+    </div>
+    <h2 class="dialog-title">{{ data.title }}</h2>
+    <button class="close-btn" (click)="onCancel()" mat-icon-button>
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div class="dialog-content">
+    <p>{{ data.message }}</p>
+  </div>
+
+  <div class="dialog-actions">
+    <button class="btn-cancel" mat-button (click)="onCancel()">
+      <mat-icon>close</mat-icon>
+      {{ data.cancelText }}
+    </button>
+    <button class="btn-confirm" [class]="getButtonClass()" mat-raised-button (click)="onConfirm()" cdkFocusInitial>
+      <mat-icon *ngIf="data.type === 'danger'">delete</mat-icon>
+      <mat-icon *ngIf="data.type === 'warning'">warning</mat-icon>
+      <mat-icon *ngIf="data.type === 'success'">check</mat-icon>
+      <mat-icon *ngIf="data.type === 'info'">check_circle</mat-icon>
+      {{ data.confirmText }}
+    </button>
+  </div>
+
+</div>

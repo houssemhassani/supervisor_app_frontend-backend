@@ -7,10 +7,11 @@ import { Users } from './pages/admin/users/users';
 import { ProjectTask } from './pages/manager/project-task/project-task';
 import { ProductivityDashboard } from './pages/manager/productivity-dashboard/productivity-dashboard';
 import { AdminDashboard } from './pages/admin/dashboard/dashboard';
-import { EmployeeDashboardComponent } from './pages/employee/dashboard/employee'; // NOUVEAU
+import { EmployeeDashboardComponent } from './pages/employee/dashboard/employee'; // Correction du chemin
+import { ManagerDashboardComponent } from './pages/manager/manager-dashboard/manager-dashboard'; // NOUVEAU - Dashboard Manager
 import { MainLayoutComponent } from './layouts/main-layout/main-layout';
 import { AuthGuard } from './core/guards/auth-guard';
-import { RoleGuard } from './core/guards/role-guard'; // AJOUTER SI BESOIN
+import { RoleGuard } from './core/guards/role-guard';
 
 export const routes: Routes = [
   // Routes publiques (sans navbar)
@@ -32,18 +33,24 @@ export const routes: Routes = [
       // Routes Manager
       { path: 'manager/project-task', component: ProjectTask },
       { path: 'manager/productivity-dashboard', component: ProductivityDashboard },
+      { 
+        path: 'manager/dashboard', 
+        component: ManagerDashboardComponent,
+        canActivate: [RoleGuard],
+        data: { roles: ['MANAGER', 'ADMIN'] } // Accessible aux managers et admins
+      },
       
-      // Routes Employee (NOUVEAU)
+      // Routes Employee
       { 
         path: 'employee/dashboard', 
         component: EmployeeDashboardComponent,
-        // Si vous avez un RoleGuard pour restreindre l'accès
-        // canActivate: [RoleGuard],
-        // data: { roles: ['EMPLOYEE'] }
+        canActivate: [RoleGuard],
+        data: { roles: ['EMPLOYEE', 'MANAGER', 'ADMIN'] } // Accessible à tous
       },
       
-      // Redirection par défaut après login (optionnel)
-      { path: 'dashboard', redirectTo: 'employee/dashboard', pathMatch: 'full' }, // MODIFIÉ POUR EMPLOYEE
+      // Redirection par défaut selon le rôle (optionnel)
+      // La redirection se fera dynamiquement dans le AuthGuard ou Login
+      { path: 'dashboard', redirectTo: 'employee/dashboard', pathMatch: 'full' },
     ]
   },
   

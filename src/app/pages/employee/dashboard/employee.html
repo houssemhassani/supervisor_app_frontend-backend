@@ -35,11 +35,11 @@
       <span class="btn-icon">▶️</span>
       <span>Reprendre</span>
     </button>
-    <button class="action-btn" (click)="checkOut()" [disabled]="!isCheckedIn || isCheckedOut">
-  <span class="btn-icon">🏠</span>
-  <span>Pointer Sortie</span>
-</button>
     
+    <button class="action-btn" (click)="checkOut()" [disabled]="!isCheckedIn || isCheckedOut">
+      <span class="btn-icon">🏠</span>
+      <span>Pointer Sortie</span>
+    </button>
   </div>
 
   <!-- Stats Cards -->
@@ -200,6 +200,16 @@
         <div class="leave-status" [ngClass]="request.statuts.toLowerCase()">
           {{ getLeaveStatusLabel(request.statuts) }}
         </div>
+        
+        <!-- 🔥 BOUTONS MODIFIER ET SUPPRIMER (uniquement pour PENDING) -->
+        <div class="leave-actions" *ngIf="request.statuts === 'PENDING'">
+          <button class="btn-edit" (click)="editLeaveRequest(request)" title="Modifier">
+            ✏️
+          </button>
+          <button class="btn-delete" (click)="openDeleteModal(request.id, request)" title="Supprimer">
+            🗑️
+          </button>
+        </div>
       </div>
       
       <div class="empty-state" *ngIf="leaveRequests.length === 0">
@@ -216,11 +226,11 @@
     </button>
   </div>
 
-  <!-- Leave Request Modal -->
+  <!-- Leave Request Modal (Création/Modification) -->
   <div class="modal" [class.show]="showLeaveModal" (click)="closeModal($event)">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Nouvelle demande de congé</h3>
+        <h3>{{ editingLeaveId ? 'Modifier la demande' : 'Nouvelle demande de congé' }}</h3>
         <button class="close-btn" (click)="closeLeaveModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -261,7 +271,34 @@
       <div class="modal-footer">
         <button class="btn-cancel" (click)="closeLeaveModal()">Annuler</button>
         <button class="btn-submit" (click)="submitLeaveRequest()" [disabled]="!canSubmitLeave()">
-          Envoyer la demande
+          {{ editingLeaveId ? 'Modifier' : 'Envoyer' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🔥 DELETE CONFIRMATION MODAL -->
+  <div class="modal delete-modal" [class.show]="showDeleteModal" (click)="cancelDelete()">
+    <div class="modal-content delete-modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header delete-header">
+        <div class="delete-icon">🗑️</div>
+        <h3>Confirmer la suppression</h3>
+        <button class="close-btn" (click)="cancelDelete()">✕</button>
+      </div>
+      <div class="modal-body delete-body">
+        <p>Êtes-vous sûr de vouloir supprimer cette demande ?</p>
+        <div class="delete-details" *ngIf="deleteRequestTitle">
+          <span class="delete-detail-icon">📋</span>
+          <span>{{ deleteRequestTitle }}</span>
+        </div>
+        <p class="delete-warning">Cette action est irréversible.</p>
+      </div>
+      <div class="modal-footer delete-footer">
+        <button class="btn-cancel" (click)="cancelDelete()">
+          <span>❌</span> Annuler
+        </button>
+        <button class="btn-confirm-delete" (click)="confirmDelete()">
+          <span>🗑️</span> Supprimer
         </button>
       </div>
     </div>

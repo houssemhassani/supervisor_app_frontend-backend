@@ -58,6 +58,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   leaveBalance = 15;
   pendingRequests = 0;
   showLeaveModal = false;
+  editingLeaveId: number | null = null;
   newLeave = {
     type: 'ANNUAL',
     start_date: '',
@@ -65,6 +66,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     reason: ''
   };
   leaveValidationErrors: string[] = [];
+  
+  // 🔥 Delete confirmation modal
+  showDeleteModal = false;
+  deleteRequestId: number | null = null;
+  deleteRequestTitle: string = '';
+  deleteRequestType: string = '';
   
   // Chart
   weeklyData: ChartConfiguration<'line'>['data'] = {
@@ -143,7 +150,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.loadLeaveRequests();
     this.loadWeeklyStats();
     
-    // Auto-refresh toutes les 60 secondes
     this.refreshSubscription = interval(60000).subscribe(() => {
       console.log('🔄 Auto-refresh des données...');
       this.refreshData();
@@ -203,6 +209,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     } catch {
       return dateString;
     }
+  }
+  
+  formatDateForInput(dateString: string): string {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
   }
   
   formatDateTime(date: Date | string | null): string {
@@ -506,10 +518,9 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.weeklyData = { ...this.weeklyData };
   }
   
-  // ========== TÂCHES AVEC DÉDOUBLONNAGE ==========
+  // ========== TÂCHES ==========
   
   loadTasks(): void {
-    // Annuler la précédente requête
     if (this.tasksSubscription) {
       this.tasksSubscription.unsubscribe();
     }
@@ -526,7 +537,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       next: (response: any) => {
         console.log('✅ [loadTasks] Réponse reçue:', response);
         
-        // Extraire les tâches de la réponse
         let rawTasks: any[] = [];
         
         if (response?.data) {
@@ -539,9 +549,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
           }
         }
         
-        console.log(`📋 Nombre de tâches brutes: ${rawTasks.length}`);
-        
-        // 🔥 DÉDOUBLONNAGE PAR ID
         const uniqueTasksMap = new Map<number, any>();
         rawTasks.forEach(task => {
           if (task && task.id && !uniqueTasksMap.has(task.id)) {
@@ -550,9 +557,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         });
         
         const uniqueTasks = Array.from(uniqueTasksMap.values());
-        console.log(`📋 Après dédoublonnage: ${uniqueTasks.length} tâches uniques`);
         
-        // Filtrer par utilisateur assigné
         this.tasks = uniqueTasks.filter((task: any) => {
           const assignedTo = task.assigned_to;
           if (!assignedTo) return false;
@@ -566,9 +571,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
           return false;
         });
         
-        console.log(`📋 Après filtrage utilisateur: ${this.tasks.length} tâches`);
-        
-        // Trier par date d'échéance
         this.tasks.sort((a, b) => {
           if (a.due_date && b.due_date) {
             return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
@@ -642,9 +644,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       return;
     }
     
-    const userId = this.user?.id || 1;
-    
-    this.apiService.getLeaveRequests(userId).subscribe({
+    this.apiService.getLeaveRequests().subscribe({
       next: (response) => {
         if (response && response.data) {
           this.leaveRequests = response.data;
@@ -697,53 +697,112 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
   }
   
-submitLeaveRequest(): void {
-  if (!this.validateLeaveForm()) return;
-
-  this.isLoading = true;
-
-  const leaveData = {
-    type: this.newLeave.type,
-    start_date: this.newLeave.start_date,
-    end_date: this.newLeave.end_date,
-    reason: this.newLeave.reason || ''
-  };
-
-  console.log("📤 Données envoyées :", leaveData);
-
-  this.apiService.createLeaveRequest(leaveData).subscribe({
-    next: (response: any) => {
-      console.log('✅ Réponse complète:', response);
-      console.log('✅ Data:', response.data);
-      console.log('👤 User ID dans la réponse:', response.data?.user);
-      
-      // Vérifier que la réponse contient bien le user
-      if (response.data && response.data.user) {
-        console.log('✅ Demande créée pour l\'utilisateur ID:', response.data.user);
-      } else {
-        console.warn('⚠️ La réponse ne contient pas le champ user');
-        console.log('📊 Structure de la réponse:', Object.keys(response.data || {}));
-      }
-      
-      this.leaveRequests.unshift(response.data);
-      this.pendingRequests++;
-      this.showNotificationMessage('Demande de congé envoyée avec succès', 'success');
-      this.closeLeaveModal();
-      this.newLeave = {
-        type: 'ANNUAL',
-        start_date: '',
-        end_date: '',
-        reason: ''
-      };
-      this.isLoading = false;
-    },
-    error: (error) => {
-      console.error('❌ Erreur:', error);
-      this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
-      this.isLoading = false;
+  // 🔥 MODIFIER UNE DEMANDE
+  editLeaveRequest(leave: any): void {
+    if (leave.statuts !== 'PENDING') {
+      this.showNotificationMessage('Seules les demandes en attente peuvent être modifiées', 'error');
+      return;
     }
-  });
-}
+    
+    this.newLeave = {
+      type: leave.type,
+      start_date: this.formatDateForInput(leave.start_date),
+      end_date: this.formatDateForInput(leave.end_date),
+      reason: leave.reason
+    };
+    
+    this.editingLeaveId = leave.id;
+    this.showLeaveModal = true;
+  }
+  
+  // 🔥 OUVRIR LE MODAL DE CONFIRMATION DE SUPPRESSION
+  openDeleteModal(id: number, leave: any): void {
+    this.deleteRequestId = id;
+    this.deleteRequestTitle = `${leave.type} du ${this.formatDate(leave.start_date)} au ${this.formatDate(leave.end_date)}`;
+    this.showDeleteModal = true;
+  }
+  
+  // 🔥 CONFIRMER LA SUPPRESSION
+  confirmDelete(): void {
+    if (!this.deleteRequestId) return;
+    
+    this.isLoading = true;
+    this.showDeleteModal = false;
+    
+    this.apiService.deleteLeaveRequest(this.deleteRequestId).subscribe({
+      next: () => {
+        this.leaveRequests = this.leaveRequests.filter(r => r.id !== this.deleteRequestId);
+        this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
+        this.showNotificationMessage('Demande supprimée avec succès', 'success');
+        this.isLoading = false;
+        this.deleteRequestId = null;
+      },
+      error: (error) => {
+        console.error('❌ Erreur suppression:', error);
+        this.showNotificationMessage('Erreur lors de la suppression', 'error');
+        this.isLoading = false;
+        this.deleteRequestId = null;
+      }
+    });
+  }
+  
+  // 🔥 ANNULER LA SUPPRESSION
+  cancelDelete(): void {
+    this.showDeleteModal = false;
+    this.deleteRequestId = null;
+    this.deleteRequestTitle = '';
+  }
+  
+  // 🔥 SUBMIT POUR GÉRER CRÉATION ET MODIFICATION
+  submitLeaveRequest(): void {
+    if (!this.validateLeaveForm()) return;
+
+    this.isLoading = true;
+
+    const leaveData = {
+      type: this.newLeave.type,
+      start_date: this.newLeave.start_date,
+      end_date: this.newLeave.end_date,
+      reason: this.newLeave.reason || ''
+    };
+
+    // Si c'est une modification
+    if (this.editingLeaveId) {
+      this.apiService.updateLeaveRequest(this.editingLeaveId, leaveData).subscribe({
+        next: (response: any) => {
+          const index = this.leaveRequests.findIndex(r => r.id === this.editingLeaveId);
+          if (index !== -1) {
+            this.leaveRequests[index] = { ...this.leaveRequests[index], ...response.data };
+          }
+          this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
+          this.showNotificationMessage('Demande modifiée avec succès', 'success');
+          this.closeLeaveModal();
+          this.isLoading = false;
+        },
+        error: (error) => {
+          console.error('❌ Erreur modification:', error);
+          this.showNotificationMessage('Erreur lors de la modification', 'error');
+          this.isLoading = false;
+        }
+      });
+    } else {
+      // Sinon c'est une création
+      this.apiService.createLeaveRequest(leaveData).subscribe({
+        next: (response: any) => {
+          this.leaveRequests.unshift(response.data);
+          this.pendingRequests++;
+          this.showNotificationMessage('Demande de congé envoyée avec succès', 'success');
+          this.closeLeaveModal();
+          this.isLoading = false;
+        },
+        error: (error) => {
+          console.error('❌ Erreur:', error);
+          this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
+          this.isLoading = false;
+        }
+      });
+    }
+  }
   
   validateLeaveForm(): boolean {
     this.leaveValidationErrors = [];
@@ -791,12 +850,20 @@ submitLeaveRequest(): void {
       end_date: '',
       reason: ''
     };
+    this.editingLeaveId = null;
     this.leaveValidationErrors = [];
     this.showLeaveModal = true;
   }
   
   closeLeaveModal(): void {
     this.showLeaveModal = false;
+    this.editingLeaveId = null;
+    this.newLeave = {
+      type: 'ANNUAL',
+      start_date: '',
+      end_date: '',
+      reason: ''
+    };
   }
   
   closeModal(event: MouseEvent): void {

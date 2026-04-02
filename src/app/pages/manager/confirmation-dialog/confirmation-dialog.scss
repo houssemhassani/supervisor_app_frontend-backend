@@ -1,0 +1,261 @@
+// src/app/components/shared/confirmation-dialog/confirmation-dialog.component.scss
+.confirmation-dialog {
+  min-width: 400px;
+  max-width: 500px;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  animation: slideIn 0.2s ease-out;
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  // En-tête
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    padding: 20px 24px 16px 24px;
+    border-bottom: 3px solid;
+    position: relative;
+    background: #fafafa;
+
+    .header-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 16px;
+      transition: all 0.3s ease;
+
+      mat-icon {
+        color: white;
+        font-size: 28px;
+        width: 28px;
+        height: 28px;
+      }
+    }
+
+    .dialog-title {
+      flex: 1;
+      margin: 0;
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .close-btn {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      color: #999;
+      transition: all 0.2s;
+
+      &:hover {
+        color: #333;
+        background: rgba(0, 0, 0, 0.05);
+      }
+    }
+  }
+
+  // Corps du message
+  .dialog-content {
+    padding: 24px;
+    background: white;
+
+    p {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.5;
+      color: #555;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+
+  // Actions
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px 24px 24px;
+    background: #fafafa;
+    border-top: 1px solid #e0e0e0;
+
+    button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      font-weight: 500;
+      transition: all 0.2s;
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+    }
+
+    .btn-cancel {
+      color: #666;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.05);
+        color: #333;
+      }
+    }
+
+    .btn-primary {
+      background-color: #2196f3;
+      color: white;
+
+      &:hover {
+        background-color: #1976d2;
+        transform: translateY(-1px);
+      }
+    }
+
+    .btn-danger {
+      background-color: #f44336;
+      color: white;
+
+      &:hover {
+        background-color: #d32f2f;
+        transform: translateY(-1px);
+      }
+    }
+
+    .btn-warning {
+      background-color: #ff9800;
+      color: white;
+
+      &:hover {
+        background-color: #f57c00;
+        transform: translateY(-1px);
+      }
+    }
+
+    .btn-success {
+      background-color: #4caf50;
+      color: white;
+
+      &:hover {
+        background-color: #388e3c;
+        transform: translateY(-1px);
+      }
+    }
+  }
+}
+
+// Version mobile
+@media (max-width: 600px) {
+  .confirmation-dialog {
+    min-width: auto;
+    max-width: 90vw;
+    margin: 20px;
+
+    .dialog-header {
+      padding: 16px 20px 12px 20px;
+
+      .header-icon {
+        width: 40px;
+        height: 40px;
+
+        mat-icon {
+          font-size: 24px;
+          width: 24px;
+          height: 24px;
+        }
+      }
+
+      .dialog-title {
+        font-size: 1.2rem;
+      }
+    }
+
+    .dialog-content {
+      padding: 20px;
+
+      p {
+        font-size: 0.95rem;
+      }
+    }
+
+    .dialog-actions {
+      padding: 12px 20px 20px 20px;
+      gap: 8px;
+
+      button {
+        padding: 6px 16px;
+        font-size: 0.9rem;
+      }
+    }
+  }
+}
+
+// Animation de chargement
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+// Mode sombre (optionnel)
+@media (prefers-color-scheme: dark) {
+  .confirmation-dialog {
+    background: #1e1e1e;
+
+    .dialog-header {
+      background: #2d2d2d;
+      border-bottom-color: #3d3d3d;
+
+      .dialog-title {
+        color: #e0e0e0;
+      }
+
+      .close-btn {
+        color: #888;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: #fff;
+        }
+      }
+    }
+
+    .dialog-content {
+      background: #1e1e1e;
+
+      p {
+        color: #b0b0b0;
+      }
+    }
+
+    .dialog-actions {
+      background: #2d2d2d;
+      border-top-color: #3d3d3d;
+
+      .btn-cancel {
+        color: #aaa;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: #fff;
+        }
+      }
+    }
+  }
+}

@@ -124,18 +124,40 @@ getTasks(userId?: number): Observable<any> {
       data: { statuts: status } 
     }, { headers });
   }
+updateLeaveRequest(id: number, data: any): Observable<any> {
+  const token = localStorage.getItem('token') || localStorage.getItem('jwt');
+  
+  if (!token) {
+    return throwError(() => new Error('Non connecté'));
+  }
+  
+  const headers = new HttpHeaders({
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  });
 
+  const payload = {
+    data: {
+      type: data.type,
+      start_date: data.start_date,
+      end_date: data.end_date,
+      reason: data.reason
+    }
+  };
+  
+  return this.http.put(`${this.apiUrl}/leave-requests/${id}`, payload, { headers }).pipe(
+    tap(response => console.log('✅ Demande modifiée:', response)),
+    catchError(error => {
+      console.error('❌ Erreur modification:', error);
+      return throwError(() => error);
+    })
+  );
+}
   // ========== LEAVE REQUESTS ==========
   
   // src/app/services/employee.ts
 getLeaveRequests(userId?: number): Observable<any> {
   let url = `${this.apiUrl}/leave-requests?sort=createdAt:desc`;
-  
-  // ❌ SUPPRIMER ÇA
-  // if (userId) {
-  //   url += `&filters[user][id][$eq]=${userId}`;
-  // }
-
   const headers = this.getHeaders();
   return this.http.get(url, { headers });
 }
@@ -215,7 +237,32 @@ createLeaveRequest(data: any): Observable<any> {
     const headers = this.getHeaders();
     return this.http.delete(`${this.apiUrl}/leave-requests/${id}`, { headers });
   }
-
+deleteLeaveRequest(id: number): Observable<any> {
+  const token = localStorage.getItem('token') || localStorage.getItem('jwt');
+  
+  if (!token) {
+    return throwError(() => new Error('Non connecté'));
+  }
+  
+  const headers = new HttpHeaders({
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  });
+  
+  console.log(`🗑️ Suppression demande ID: ${id}`);
+  
+  return this.http.delete(`${this.apiUrl}/leave-requests/${id}`, { headers }).pipe(
+    tap(response => {
+      // La réponse peut être null ou { success: true }
+      console.log('✅ Demande supprimée avec succès');
+      console.log('📦 Réponse brute:', response);
+    }),
+    catchError(error => {
+      console.error('❌ Erreur suppression:', error);
+      return throwError(() => error);
+    })
+  );
+}
   // ========== TEST AUTH ==========
   
   testAuth(): Observable<any> {

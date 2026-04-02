@@ -3,8 +3,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { BehaviorSubject, Observable, throwError } from 'rxjs';
-import { catchError, tap, switchMap, map } from 'rxjs/operators';
+import { BehaviorSubject, Observable, throwError, of } from 'rxjs';
+import { catchError, tap, switchMap, map, timeout } from 'rxjs/operators';
 
 export interface User {
   id: number;
@@ -42,13 +42,10 @@ export class AuthService {
   }
 
   /**
-   * Connexion utilisateur
-   * Endpoint: POST /api/auth/local
+   * Connexion utilisateur - VERSION CORRIGÉE
    */
-  login(email: string, password: string): Observable<LoginResponse> {
-    console.log('🔵 [LOGIN] Tentative de connexion avec:', { email, password });
-    
-    // Nettoyer les données
+  // Modifiez votre méthode login dans auth.ts
+login(email: string, password: string): Observable<LoginResponse> {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
     
@@ -57,41 +54,267 @@ export class AuthService {
       password: cleanPassword
     }).pipe(
       tap((response: LoginResponse) => {
-        // STOCKER LE TOKEN IMMÉDIATEMENT APRÈS LA RÉPONSE
-        console.log('🟢 [LOGIN] Réponse reçue - JWT présent:', !!response.jwt);
-        if (response.jwt) {
-          localStorage.setItem('token', response.jwt);
-          console.log('✅ Token stocké immédiatement:', response.jwt.substring(0, 50) + '...');
+        // Stocker le token
+        localStorage.setItem('token', response.jwt);
+        localStorage.setItem('jwt', response.jwt);
+        
+        // DÉTERMINER LE RÔLE SIMPLEMENT
+        let roleName = 'employee';
+        
+        // Méthode 1: Par email
+        if (cleanEmail.includes('manager') || cleanEmail.includes('chef')) {
+          roleName = 'manager';
+        } else if (cleanEmail.includes('admin')) {
+          roleName = 'admin';
         }
-      }),
-      switchMap((response: LoginResponse) => {
-        console.log('🟢 [LOGIN] Login réussi, récupération du rôle...');
         
-        const headers = new HttpHeaders({
-          'Authorization': `Bearer ${response.jwt}`
-        });
+        // Méthode 2: Si vous avez le rôle dans la réponse
+        if (response.user.role?.name) {
+          roleName = response.user.role.name.toLowerCase();
+        }
         
-        return this.http.get(`${this.apiUrl}/users/${response.user.id}?populate=role`, { headers }).pipe(
-          map((userWithRole: any) => {
-            response.user.role = userWithRole.role;
-            console.log('🟢 [LOGIN] Rôle récupéré:', response.user.role);
-            return response;
-          })
-        );
+        console.log(`🎭 Rôle déterminé: ${roleName}`);
+        
+        // Stocker le rôle
+        localStorage.setItem('userRole', roleName);
+        
+        // Stocker l'utilisateur avec le rôle
+        const userWithRole = {
+          ...response.user,
+          role: { id: 0, name: roleName, type: roleName }
+        };
+        
+        localStorage.setItem('authData', JSON.stringify({
+          jwt: response.jwt,
+          user: userWithRole
+        }));
+        
+        localStorage.setItem('user', JSON.stringify({
+          id: response.user.id,
+          email: response.user.email,
+          username: response.user.username,
+          role: roleName
+        }));
+        
+        // Mettre à jour le BehaviorSubject
+        this.currentUserSubject.next(userWithRole);
+        
+        // Rediriger
+        console.log(`🔄 Redirection vers: /${roleName}/dashboard`);
+        setTimeout(() => {
+          this.router.navigate([`/${roleName}/dashboard`]);
+        }, 100);
       }),
-      tap(response => this.handleAuthentication(response)),
-      catchError((error) => {
-        console.error('🔴 [LOGIN] Erreur:', error);
-        return this.handleError(error);
+      map(response => response),
+      catchError((error) => this.handleError(error))
+    );
+  }
+  
+  getUserRole(): string | null {
+    // Priorité au localStorage direct
+    const role = localStorage.getItem('userRole');
+    if (role) {
+      console.log('🎭 [getUserRole] Depuis localStorage:', role);
+      return role;
+    }
+    
+    // Sinon depuis currentUser
+    const user = this.currentUserSubject.value;
+    if (user?.role?.name) {
+      const roleName = user.role.name.toLowerCase();
+      console.log('🎭 [getUserRole] Depuis currentUser:', roleName);
+      return roleName;
+    }
+    
+    return 'employee';
+  }
+
+
+// Ajoutez cette nouvelle méthode
+private getUserRoleWithFallback(jwt: string, user: User): Observable<{role: any}> {
+  const headers = new HttpHeaders({
+    'Authorization': `Bearer ${jwt}`
+  });
+  
+  // Essayer plusieurs endpoints
+  const endpoints = [
+    `${this.apiUrl}/users/${user.id}?populate=role`,
+    `${this.apiUrl}/users/${user.id}?populate=*`,
+    `${this.apiUrl}/users/me?populate=role`,
+    `${this.apiUrl}/users/me`
+  ];
+  
+  return this.http.get(endpoints[0], { headers }).pipe(
+    timeout(5000),
+    map((data: any) => {
+      console.log('🟢 [ROLE] Données reçues:', data);
+      
+      // Strapi v4
+      if (data.role) {
+        return { role: data.role };
+      }
+      // Strapi v5
+      if (data.roles && data.roles.length > 0) {
+        return { role: data.roles[0] };
+      }
+      // Si pas de rôle, essayer de récupérer depuis les données utilisateur originales
+      if (user.role) {
+        return { role: user.role };
+      }
+      return { role: null };
+    }),
+    catchError((error) => {
+      console.warn('⚠️ [ROLE] Erreur récupération rôle, utilisation fallback:', error);
+      
+      // Fallback: déterminer le rôle via l'email
+      let roleName = 'employee';
+      if (user.email && user.email.toLowerCase().includes('manager')) {
+        roleName = 'manager';
+      } else if (user.email && user.email.toLowerCase().includes('admin')) {
+        roleName = 'admin';
+      }
+      
+      return of({ role: { id: 0, name: roleName, type: roleName } });
+    })
+  );
+}
+
+// Ajoutez cette méthode pour forcer la mise à jour
+private updateCurrentUserWithRole(response: LoginResponse): void {
+  console.log('🔄 [UPDATE] Mise à jour currentUser avec rôle');
+  
+  // S'assurer que le rôle est présent
+  if (!response.user.role) {
+    // Détection par email
+    let roleName = 'employee';
+    if (response.user.email && response.user.email.toLowerCase().includes('manager')) {
+      roleName = 'manager';
+    } else if (response.user.email && response.user.email.toLowerCase().includes('admin')) {
+      roleName = 'admin';
+    }
+    response.user.role = { id: 0, name: roleName, type: roleName };
+  }
+  
+  // Mettre à jour le BehaviorSubject
+  this.currentUserSubject.next(response.user);
+  
+  // Stocker dans localStorage avec le rôle correct
+  localStorage.setItem('userRole', response.user.role.name.toLowerCase());
+  localStorage.setItem('user', JSON.stringify({
+    id: response.user.id,
+    email: response.user.email,
+    username: response.user.username,
+    role: response.user.role.name.toLowerCase()
+  }));
+  
+  console.log('✅ [UPDATE] CurrentUser mis à jour:', this.currentUserSubject.value);
+  console.log('✅ [UPDATE] Rôle stocké:', localStorage.getItem('userRole'));
+}
+
+// Ajoutez cette méthode dans AuthService
+forceRoleUpdate(role: 'admin' | 'manager' | 'employee'): void {
+  console.log(`🔧 [FORCE] Mise à jour forcée du rôle vers: ${role}`);
+  
+  const currentUser = this.currentUserSubject.value;
+  if (currentUser) {
+    currentUser.role = { id: 0, name: role, type: role };
+    this.currentUserSubject.next(currentUser);
+    
+    localStorage.setItem('userRole', role);
+    
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        user.role = role;
+        localStorage.setItem('user', JSON.stringify(user));
+      } catch(e) {}
+    }
+    
+    const authDataStr = localStorage.getItem('authData');
+    if (authDataStr) {
+      try {
+        const authData = JSON.parse(authDataStr);
+        if (authData.user) {
+          authData.user.role = { id: 0, name: role, type: role };
+          localStorage.setItem('authData', JSON.stringify(authData));
+        }
+      } catch(e) {}
+    }
+  }
+  
+  console.log('✅ [FORCE] Rôle mis à jour, redirection...');
+  this.redirectByRole(role);
+}
+  /**
+   * Récupérer l'utilisateur avec son rôle - Version robuste
+   */
+  private getUserWithRole(jwt: string, user: User): Observable<any> {
+    const headers = new HttpHeaders({
+      'Authorization': `Bearer ${jwt}`
+    });
+    
+    console.log('🔵 [GET_USER] Récupération du rôle pour user ID:', user.id);
+    
+    // Essayer différentes URLs possibles selon la version de Strapi
+    const urls = [
+      `${this.apiUrl}/users/${user.id}?populate=role`,
+      `${this.apiUrl}/users/${user.id}?populate=*`,
+      `${this.apiUrl}/users/${user.id}`,
+      `${this.apiUrl}/users/me?populate=role`
+    ];
+    
+    // Essayer la première URL
+    return this.http.get(urls[0], { headers }).pipe(
+      timeout(5000),
+      tap((data: any) => console.log('🟢 [GET_USER] Données reçues:', data)),
+      map((data: any) => {
+        // Strapi v4 structure
+        if (data.role) {
+          return data;
+        }
+        // Strapi v5 structure
+        if (data.roles && data.roles.length > 0) {
+          return { ...data, role: data.roles[0] };
+        }
+        return data;
       })
     );
   }
 
   /**
-   * Mot de passe oublié - Version simulation
+   * Détecter le rôle à partir de l'email
+   */
+  private detectRoleFromEmail(email: string): string | null {
+    if (!email) return null;
+    
+    const emailLower = email.toLowerCase();
+    
+    // Vérifier les patterns d'email
+    if (emailLower.includes('admin')) {
+      return 'admin';
+    }
+    if (emailLower.includes('manager') || emailLower.includes('chef') || emailLower.includes('directeur')) {
+      return 'manager';
+    }
+    if (emailLower.includes('employee') || emailLower.includes('staff') || emailLower.includes('user')) {
+      return 'employee';
+    }
+    
+    // Récupérer depuis localStorage si disponible
+    const savedRole = localStorage.getItem('userRole');
+    if (savedRole) {
+      return savedRole;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Mot de passe oublié
    */
   forgotPassword(email: string): Observable<any> {
-    console.log('🔵 [SIMULATION] Demande de réinitialisation pour:', email);
+    console.log('🔵 [FORGOT_PASSWORD] Demande pour:', email);
     
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let fakeCode = '';
@@ -106,21 +329,14 @@ export class AuthService {
     
     alert(`🔐 CODE DE RÉINITIALISATION\n\n${fakeCode}\n\nUtilisez ce code pour réinitialiser votre mot de passe.`);
     
-    return new Observable(observer => {
-      observer.next({ 
-        ok: true, 
-        message: 'Code envoyé avec succès',
-        code: fakeCode 
-      });
-      observer.complete();
-    });
+    return of({ ok: true, message: 'Code envoyé avec succès', code: fakeCode });
   }
 
   /**
-   * Réinitialiser le mot de passe - Version simulation
+   * Réinitialiser le mot de passe
    */
   resetPassword(code: string, password: string, passwordConfirmation: string): Observable<any> {
-    console.log('🔵 [SIMULATION] Réinitialisation avec code:', code);
+    console.log('🔵 [RESET_PASSWORD] Tentative avec code:', code);
     
     if (password !== passwordConfirmation) {
       return throwError(() => new Error('Les mots de passe ne correspondent pas'));
@@ -130,15 +346,9 @@ export class AuthService {
       return throwError(() => new Error('Code invalide'));
     }
     
-    console.log('✅ [SIMULATION] Mot de passe réinitialisé avec succès');
+    console.log('✅ [RESET_PASSWORD] Succès');
     
-    return new Observable(observer => {
-      observer.next({ 
-        ok: true, 
-        message: 'Mot de passe réinitialisé avec succès' 
-      });
-      observer.complete();
-    });
+    return of({ ok: true, message: 'Mot de passe réinitialisé avec succès' });
   }
 
   /**
@@ -146,7 +356,10 @@ export class AuthService {
    */
   logout(): void {
     localStorage.removeItem('token');
+    localStorage.removeItem('jwt');
     localStorage.removeItem('authData');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('user');
     this.currentUserSubject.next(null);
     this.router.navigate(['/login']);
   }
@@ -161,42 +374,32 @@ export class AuthService {
   }
 
   /**
-   * Récupérer le token JWT - CORRIGÉ
+   * Récupérer le token JWT
    */
   getToken(): string | null {
-    // Essayer de récupérer depuis 'token' d'abord
     let token = localStorage.getItem('token');
-    
-    // Si pas trouvé, essayer depuis 'authData'
+    if (!token) {
+      token = localStorage.getItem('jwt');
+    }
     if (!token) {
       const stored = localStorage.getItem('authData');
       if (stored) {
         try {
           const authData = JSON.parse(stored);
           token = authData.jwt;
-          // Synchroniser pour les futures requêtes
           if (token) {
             localStorage.setItem('token', token);
+            localStorage.setItem('jwt', token);
           }
         } catch (e) {
           console.error('Erreur parsing authData:', e);
         }
       }
     }
-    
     return token;
   }
 
-  /**
-   * Récupérer le rôle de l'utilisateur
-   */
-  getUserRole(): string | null {
-    const user = this.currentUserSubject.value;
-    if (user && user.role) {
-      return user.role.name.toUpperCase();
-    }
-    return null;
-  }
+ 
 
   /**
    * Récupérer l'utilisateur courant
@@ -209,7 +412,9 @@ export class AuthService {
    * Traitement après authentification - CORRIGÉ
    */
   private handleAuthentication(response: LoginResponse): void {
-    console.log('🔵 [AUTH] handleAuthentication - User:', response.user);
+    console.log('🔵 [AUTH] handleAuthentication - Début');
+    console.log('🔵 [AUTH] User reçu:', response.user);
+    console.log('🔵 [AUTH] Role dans user:', response.user.role);
     
     if (!response.user.confirmed) {
       throw new Error('Veuillez confirmer votre email');
@@ -219,45 +424,86 @@ export class AuthService {
       throw new Error('Votre compte est bloqué');
     }
 
-    // STOCKER LE TOKEN (déjà fait plus tôt, mais on s'assure)
+    // Stocker le token
     localStorage.setItem('token', response.jwt);
+    localStorage.setItem('jwt', response.jwt);
     
-    // Stocker aussi dans authData pour compatibilité
+    // Stocker authData
     localStorage.setItem('authData', JSON.stringify({
       jwt: response.jwt,
       user: response.user
     }));
     
-    // Vérification immédiate
-    const verifyToken = localStorage.getItem('token');
-    console.log('🔍 Vérification stockage token:', verifyToken ? '✅ OK' : '❌ ÉCHEC');
+    // Extraire et stocker le rôle
+    let roleName = 'employee';
+    if (response.user.role) {
+      roleName = (response.user.role.name || response.user.role.type || 'employee').toLowerCase();
+    } else {
+      // Fallback: détecter via email
+      const detectedRole = this.detectRoleFromEmail(response.user.email);
+      if (detectedRole) {
+        roleName = detectedRole;
+      }
+    }
+    
+    localStorage.setItem('userRole', roleName);
+    
+    // Stocker aussi un user simplifié
+    localStorage.setItem('user', JSON.stringify({
+      id: response.user.id,
+      email: response.user.email,
+      username: response.user.username,
+      role: roleName
+    }));
+    
+    console.log('✅ [AUTH] Rôle stocké:', roleName);
+    console.log('✅ [AUTH] Vérification token:', !!localStorage.getItem('token'));
+    console.log('✅ [AUTH] Vérification userRole:', localStorage.getItem('userRole'));
     
     this.currentUserSubject.next(response.user);
     
-    const roleName = response.user.role?.name?.toLowerCase() || 'employee';
+    // Rediriger
     console.log('🔵 [AUTH] Redirection pour le rôle:', roleName);
     this.redirectByRole(roleName);
   }
 
   /**
-   * Redirection selon le rôle
+   * Redirection selon le rôle - CORRIGÉ
    */
   private redirectByRole(roleName: string): void {
-    console.log('🔴 [AUTH] Redirection vers:', roleName);
+    const role = roleName.toLowerCase();
+    let redirectUrl = '/employee/dashboard';
     
-    switch (roleName.toLowerCase()) {
+    console.log('🔄 [REDIRECT] Rôle reçu:', role);
+    
+    switch (role) {
       case 'admin':
-        this.router.navigate(['/admin/dashboard']);
+        redirectUrl = '/admin/dashboard';
         break;
       case 'manager':
-        this.router.navigate(['/manager/dashboard']);
+        redirectUrl = '/manager/dashboard';
         break;
       case 'employee':
-        this.router.navigate(['/employee/dashboard']);
+        redirectUrl = '/employee/dashboard';
         break;
       default:
-        this.router.navigate(['/dashboard']);
+        redirectUrl = '/dashboard';
     }
+    
+    console.log(`🔄 [REDIRECT] Redirection vers: ${redirectUrl}`);
+    
+    // Utiliser setTimeout pour éviter les problèmes de détection de changement
+    setTimeout(() => {
+      this.router.navigate([redirectUrl]).then(success => {
+        if (success) {
+          console.log('✅ [REDIRECT] Navigation réussie vers', redirectUrl);
+        } else {
+          console.error('❌ [REDIRECT] Échec de navigation vers', redirectUrl);
+          // Fallback: utiliser window.location
+          window.location.href = redirectUrl;
+        }
+      });
+    }, 100);
   }
 
   /**
@@ -269,12 +515,12 @@ export class AuthService {
       try {
         const authData = JSON.parse(stored);
         this.currentUserSubject.next(authData.user);
-        // S'assurer que le token est aussi dans 'token'
         if (authData.jwt) {
           localStorage.setItem('token', authData.jwt);
+          localStorage.setItem('jwt', authData.jwt);
         }
       } catch (e) {
-        console.error('Erreur lors du chargement de l\'utilisateur:', e);
+        console.error('Erreur lors du chargement:', e);
       }
     }
   }
@@ -296,45 +542,19 @@ export class AuthService {
   }
 
   /**
-   * Gestion centralisée des erreurs HTTP
+   * Gestion des erreurs
    */
   private handleError(error: any): Observable<never> {
-    console.log('🔴 [ERROR] Status:', error.status);
-    console.log('🔴 [ERROR] Message:', error.message);
+    console.error('🔴 [ERROR]', error);
     
     let errorMessage = 'Email ou mot de passe incorrect';
     
-    if (error.error) {
-      if (error.error.error?.message) {
-        errorMessage = error.error.error.message;
-      } else if (error.error.message) {
-        errorMessage = error.error.message;
-      }
-    }
-    
-    switch (error.status) {
-      case 400:
-        errorMessage = 'Email ou mot de passe incorrect';
-        break;
-      case 401:
-        errorMessage = 'Non autorisé. Veuillez vous reconnecter.';
-        break;
-      case 403:
-        errorMessage = 'Accès refusé. Votre compte est peut-être bloqué.';
-        break;
-      case 404:
-        errorMessage = 'Email non trouvé';
-        break;
-      case 405:
-        errorMessage = 'Erreur de configuration serveur';
-        break;
-      case 500:
-        errorMessage = 'Erreur serveur. Veuillez réessayer plus tard.';
-        break;
-      default:
-        if (!errorMessage || errorMessage === 'Email ou mot de passe incorrect') {
-          errorMessage = 'Erreur de connexion. Vérifiez vos identifiants.';
-        }
+    if (error.error?.error?.message) {
+      errorMessage = error.error.error.message;
+    } else if (error.error?.message) {
+      errorMessage = error.error.message;
+    } else if (error.message) {
+      errorMessage = error.message;
     }
     
     return throwError(() => new Error(errorMessage));

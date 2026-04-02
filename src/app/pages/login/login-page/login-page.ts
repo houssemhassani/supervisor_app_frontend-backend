@@ -64,35 +64,71 @@ export class LoginPage implements OnInit, OnDestroy {
     this.selectedRole = role;
   }
 
-  login(): void {
-    if (this.loginForm.invalid) {
-      this.loginForm.markAllAsTouched();
-      return;
-    }
-
-    this.isLoading = true;
-    this.errorMessage = '';
-    this.loginForm.disable();
-
-    const { email, password } = this.loginForm.value;
-
-    console.log('🔵 Tentative de connexion avec:', { email, password });
-
-    this.authService.login(email, password).subscribe({
-      next: (response) => {
-        console.log('🟢 Connexion réussie!', response);
-        this.isLoading = false;
-        this.loginForm.enable();
-        // La redirection est gérée dans AuthService
-      },
-      error: (error) => {
-        console.log('🔴 Erreur de connexion:', error);
-        this.isLoading = false;
-        this.loginForm.enable();
-        this.errorMessage = error.message || 'Email ou mot de passe incorrect';
-      }
-    });
+  // Dans votre login-page.ts
+login(): void {
+  if (this.loginForm.invalid) {
+    this.loginForm.markAllAsTouched();
+    return;
   }
+
+  this.isLoading = true;
+  this.errorMessage = '';
+  this.loginForm.disable();
+
+  const { email, password } = this.loginForm.value;
+
+  console.log('🔵 Tentative de connexion avec:', { email, password });
+
+  this.authService.login(email, password).subscribe({
+    next: (response) => {
+      console.log('🟢 Connexion réussie!', response);
+      
+      // FORCER LE RÔLE MANUELLEMENT
+      // Si l'email contient 'manager', forcer le rôle manager
+      if (email.toLowerCase().includes('manager')) {
+        console.log('⚠️ Email contient "manager", forcing role...');
+        const userData = {
+          id: response.user.id,
+          email: response.user.email,
+          username: response.user.username,
+          role: { id: 2, name: 'manager', type: 'manager' }
+        };
+        
+        // Mettre à jour localStorage
+        localStorage.setItem('userRole', 'manager');
+        localStorage.setItem('user', JSON.stringify({
+          id: response.user.id,
+          email: response.user.email,
+          username: response.user.username,
+          role: 'manager'
+        }));
+        
+        // Mettre à jour authData
+        const authData = {
+          jwt: response.jwt,
+          user: userData
+        };
+        localStorage.setItem('authData', JSON.stringify(authData));
+        
+        // Forcer la redirection vers manager
+        console.log('🔄 Redirection forcée vers manager/dashboard');
+        this.router.navigate(['/manager/dashboard']).then(() => {
+          this.isLoading = false;
+          this.loginForm.enable();
+        });
+      } else {
+        this.isLoading = false;
+        this.loginForm.enable();
+      }
+    },
+    error: (error) => {
+      console.log('🔴 Erreur de connexion:', error);
+      this.isLoading = false;
+      this.loginForm.enable();
+      this.errorMessage = error.message || 'Email ou mot de passe incorrect';
+    }
+  });
+}
 
   get email() { return this.loginForm.get('email'); }
   get password() { return this.loginForm.get('password'); }
