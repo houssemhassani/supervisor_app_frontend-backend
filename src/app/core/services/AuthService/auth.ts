@@ -42,83 +42,88 @@ export class AuthService {
   }
 
   /**
-   * Connexion utilisateur - VERSION CORRIGÉE
+   * Connexion utilisateur - Récupération du rôle depuis Strapi
    */
-  // Modifiez votre méthode login dans auth.ts
+  // auth.ts - Version complète corrigée
+
+// auth.ts - Modifiez uniquement la partie redirection
+
 login(email: string, password: string): Observable<LoginResponse> {
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPassword = password.trim();
-    
-    return this.http.post<LoginResponse>(`${this.apiUrl}/auth/local`, {
-      identifier: cleanEmail,
-      password: cleanPassword
-    }).pipe(
-      tap((response: LoginResponse) => {
-        // Stocker le token
-        localStorage.setItem('token', response.jwt);
-        localStorage.setItem('jwt', response.jwt);
-        
-        // DÉTERMINER LE RÔLE SIMPLEMENT
-        let roleName = 'employee';
-        
-        // Méthode 1: Par email
-        if (cleanEmail.includes('manager') || cleanEmail.includes('chef')) {
-          roleName = 'manager';
-        } else if (cleanEmail.includes('admin')) {
-          roleName = 'admin';
-        }
-        
-        // Méthode 2: Si vous avez le rôle dans la réponse
-        if (response.user.role?.name) {
-          roleName = response.user.role.name.toLowerCase();
-        }
-        
-        console.log(`🎭 Rôle déterminé: ${roleName}`);
-        
-        // Stocker le rôle
-        localStorage.setItem('userRole', roleName);
-        
-        // Stocker l'utilisateur avec le rôle
-        const userWithRole = {
-          ...response.user,
-          role: { id: 0, name: roleName, type: roleName }
-        };
-        
-        localStorage.setItem('authData', JSON.stringify({
-          jwt: response.jwt,
-          user: userWithRole
-        }));
-        
-        localStorage.setItem('user', JSON.stringify({
-          id: response.user.id,
-          email: response.user.email,
-          username: response.user.username,
-          role: roleName
-        }));
-        
-        // Mettre à jour le BehaviorSubject
-        this.currentUserSubject.next(userWithRole);
-        
-        // Rediriger
-        console.log(`🔄 Redirection vers: /${roleName}/dashboard`);
-        setTimeout(() => {
-          this.router.navigate([`/${roleName}/dashboard`]);
-        }, 100);
-      }),
-      map(response => response),
-      catchError((error) => this.handleError(error))
-    );
-  }
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password.trim();
   
+  return this.http.post<LoginResponse>(`${this.apiUrl}/auth/local`, {
+    identifier: cleanEmail,
+    password: cleanPassword
+  }).pipe(
+    switchMap((response: LoginResponse) => {
+      console.log('🟢 Login réussi, récupération du rôle...');
+      
+      localStorage.setItem('token', response.jwt);
+      localStorage.setItem('jwt', response.jwt);
+      
+      const headers = new HttpHeaders({
+        'Authorization': `Bearer ${response.jwt}`
+      });
+      
+      return this.http.get(`${this.apiUrl}/users/${response.user.id}?populate=role`, { headers }).pipe(
+        map((userWithRole: any) => {
+          console.log('🟢 Utilisateur avec rôle reçu:', userWithRole);
+          
+          let roleName = 'employee';
+          
+          if (userWithRole.role?.name) {
+            roleName = userWithRole.role.name.toLowerCase();
+          }
+          else if (userWithRole.roles && userWithRole.roles.length > 0) {
+            roleName = userWithRole.roles[0].name.toLowerCase();
+          }
+          
+          console.log(`🎭 Rôle récupéré du backend: ${roleName}`);
+          
+          localStorage.setItem('userRole', roleName);
+          
+          const userWithRoleData = {
+            ...response.user,
+            role: { id: 0, name: roleName, type: roleName }
+          };
+          
+          localStorage.setItem('authData', JSON.stringify({
+            jwt: response.jwt,
+            user: userWithRoleData
+          }));
+          
+          localStorage.setItem('user', JSON.stringify({
+            id: response.user.id,
+            email: response.user.email,
+            username: response.user.username,
+            role: roleName
+          }));
+          
+          this.currentUserSubject.next(userWithRoleData);
+          
+          // 🔥 SOLUTION QUI MARCHE : Attendre que tout soit prêt
+          console.log(`🔄 Redirection vers: /${roleName}/dashboard`);
+          
+          // Forcer la destruction du composant LoginPage
+          console.log(`🎭 Rôle stocké: ${roleName}, redirection sera faite par LoginPage`);
+
+          
+          return { ...response, user: userWithRoleData };
+        })
+      );
+    }),
+    catchError((error) => this.handleError(error))
+  );
+}
+
   getUserRole(): string | null {
-    // Priorité au localStorage direct
     const role = localStorage.getItem('userRole');
     if (role) {
       console.log('🎭 [getUserRole] Depuis localStorage:', role);
       return role;
     }
     
-    // Sinon depuis currentUser
     const user = this.currentUserSubject.value;
     if (user?.role?.name) {
       const roleName = user.role.name.toLowerCase();
@@ -127,187 +132,6 @@ login(email: string, password: string): Observable<LoginResponse> {
     }
     
     return 'employee';
-  }
-
-
-// Ajoutez cette nouvelle méthode
-private getUserRoleWithFallback(jwt: string, user: User): Observable<{role: any}> {
-  const headers = new HttpHeaders({
-    'Authorization': `Bearer ${jwt}`
-  });
-  
-  // Essayer plusieurs endpoints
-  const endpoints = [
-    `${this.apiUrl}/users/${user.id}?populate=role`,
-    `${this.apiUrl}/users/${user.id}?populate=*`,
-    `${this.apiUrl}/users/me?populate=role`,
-    `${this.apiUrl}/users/me`
-  ];
-  
-  return this.http.get(endpoints[0], { headers }).pipe(
-    timeout(5000),
-    map((data: any) => {
-      console.log('🟢 [ROLE] Données reçues:', data);
-      
-      // Strapi v4
-      if (data.role) {
-        return { role: data.role };
-      }
-      // Strapi v5
-      if (data.roles && data.roles.length > 0) {
-        return { role: data.roles[0] };
-      }
-      // Si pas de rôle, essayer de récupérer depuis les données utilisateur originales
-      if (user.role) {
-        return { role: user.role };
-      }
-      return { role: null };
-    }),
-    catchError((error) => {
-      console.warn('⚠️ [ROLE] Erreur récupération rôle, utilisation fallback:', error);
-      
-      // Fallback: déterminer le rôle via l'email
-      let roleName = 'employee';
-      if (user.email && user.email.toLowerCase().includes('manager')) {
-        roleName = 'manager';
-      } else if (user.email && user.email.toLowerCase().includes('admin')) {
-        roleName = 'admin';
-      }
-      
-      return of({ role: { id: 0, name: roleName, type: roleName } });
-    })
-  );
-}
-
-// Ajoutez cette méthode pour forcer la mise à jour
-private updateCurrentUserWithRole(response: LoginResponse): void {
-  console.log('🔄 [UPDATE] Mise à jour currentUser avec rôle');
-  
-  // S'assurer que le rôle est présent
-  if (!response.user.role) {
-    // Détection par email
-    let roleName = 'employee';
-    if (response.user.email && response.user.email.toLowerCase().includes('manager')) {
-      roleName = 'manager';
-    } else if (response.user.email && response.user.email.toLowerCase().includes('admin')) {
-      roleName = 'admin';
-    }
-    response.user.role = { id: 0, name: roleName, type: roleName };
-  }
-  
-  // Mettre à jour le BehaviorSubject
-  this.currentUserSubject.next(response.user);
-  
-  // Stocker dans localStorage avec le rôle correct
-  localStorage.setItem('userRole', response.user.role.name.toLowerCase());
-  localStorage.setItem('user', JSON.stringify({
-    id: response.user.id,
-    email: response.user.email,
-    username: response.user.username,
-    role: response.user.role.name.toLowerCase()
-  }));
-  
-  console.log('✅ [UPDATE] CurrentUser mis à jour:', this.currentUserSubject.value);
-  console.log('✅ [UPDATE] Rôle stocké:', localStorage.getItem('userRole'));
-}
-
-// Ajoutez cette méthode dans AuthService
-forceRoleUpdate(role: 'admin' | 'manager' | 'employee'): void {
-  console.log(`🔧 [FORCE] Mise à jour forcée du rôle vers: ${role}`);
-  
-  const currentUser = this.currentUserSubject.value;
-  if (currentUser) {
-    currentUser.role = { id: 0, name: role, type: role };
-    this.currentUserSubject.next(currentUser);
-    
-    localStorage.setItem('userRole', role);
-    
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        user.role = role;
-        localStorage.setItem('user', JSON.stringify(user));
-      } catch(e) {}
-    }
-    
-    const authDataStr = localStorage.getItem('authData');
-    if (authDataStr) {
-      try {
-        const authData = JSON.parse(authDataStr);
-        if (authData.user) {
-          authData.user.role = { id: 0, name: role, type: role };
-          localStorage.setItem('authData', JSON.stringify(authData));
-        }
-      } catch(e) {}
-    }
-  }
-  
-  console.log('✅ [FORCE] Rôle mis à jour, redirection...');
-  this.redirectByRole(role);
-}
-  /**
-   * Récupérer l'utilisateur avec son rôle - Version robuste
-   */
-  private getUserWithRole(jwt: string, user: User): Observable<any> {
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${jwt}`
-    });
-    
-    console.log('🔵 [GET_USER] Récupération du rôle pour user ID:', user.id);
-    
-    // Essayer différentes URLs possibles selon la version de Strapi
-    const urls = [
-      `${this.apiUrl}/users/${user.id}?populate=role`,
-      `${this.apiUrl}/users/${user.id}?populate=*`,
-      `${this.apiUrl}/users/${user.id}`,
-      `${this.apiUrl}/users/me?populate=role`
-    ];
-    
-    // Essayer la première URL
-    return this.http.get(urls[0], { headers }).pipe(
-      timeout(5000),
-      tap((data: any) => console.log('🟢 [GET_USER] Données reçues:', data)),
-      map((data: any) => {
-        // Strapi v4 structure
-        if (data.role) {
-          return data;
-        }
-        // Strapi v5 structure
-        if (data.roles && data.roles.length > 0) {
-          return { ...data, role: data.roles[0] };
-        }
-        return data;
-      })
-    );
-  }
-
-  /**
-   * Détecter le rôle à partir de l'email
-   */
-  private detectRoleFromEmail(email: string): string | null {
-    if (!email) return null;
-    
-    const emailLower = email.toLowerCase();
-    
-    // Vérifier les patterns d'email
-    if (emailLower.includes('admin')) {
-      return 'admin';
-    }
-    if (emailLower.includes('manager') || emailLower.includes('chef') || emailLower.includes('directeur')) {
-      return 'manager';
-    }
-    if (emailLower.includes('employee') || emailLower.includes('staff') || emailLower.includes('user')) {
-      return 'employee';
-    }
-    
-    // Récupérer depuis localStorage si disponible
-    const savedRole = localStorage.getItem('userRole');
-    if (savedRole) {
-      return savedRole;
-    }
-    
-    return null;
   }
 
   /**
@@ -399,111 +223,11 @@ forceRoleUpdate(role: 'admin' | 'manager' | 'employee'): void {
     return token;
   }
 
- 
-
   /**
    * Récupérer l'utilisateur courant
    */
   getCurrentUser(): User | null {
     return this.currentUserSubject.value;
-  }
-
-  /**
-   * Traitement après authentification - CORRIGÉ
-   */
-  private handleAuthentication(response: LoginResponse): void {
-    console.log('🔵 [AUTH] handleAuthentication - Début');
-    console.log('🔵 [AUTH] User reçu:', response.user);
-    console.log('🔵 [AUTH] Role dans user:', response.user.role);
-    
-    if (!response.user.confirmed) {
-      throw new Error('Veuillez confirmer votre email');
-    }
-    
-    if (response.user.blocked) {
-      throw new Error('Votre compte est bloqué');
-    }
-
-    // Stocker le token
-    localStorage.setItem('token', response.jwt);
-    localStorage.setItem('jwt', response.jwt);
-    
-    // Stocker authData
-    localStorage.setItem('authData', JSON.stringify({
-      jwt: response.jwt,
-      user: response.user
-    }));
-    
-    // Extraire et stocker le rôle
-    let roleName = 'employee';
-    if (response.user.role) {
-      roleName = (response.user.role.name || response.user.role.type || 'employee').toLowerCase();
-    } else {
-      // Fallback: détecter via email
-      const detectedRole = this.detectRoleFromEmail(response.user.email);
-      if (detectedRole) {
-        roleName = detectedRole;
-      }
-    }
-    
-    localStorage.setItem('userRole', roleName);
-    
-    // Stocker aussi un user simplifié
-    localStorage.setItem('user', JSON.stringify({
-      id: response.user.id,
-      email: response.user.email,
-      username: response.user.username,
-      role: roleName
-    }));
-    
-    console.log('✅ [AUTH] Rôle stocké:', roleName);
-    console.log('✅ [AUTH] Vérification token:', !!localStorage.getItem('token'));
-    console.log('✅ [AUTH] Vérification userRole:', localStorage.getItem('userRole'));
-    
-    this.currentUserSubject.next(response.user);
-    
-    // Rediriger
-    console.log('🔵 [AUTH] Redirection pour le rôle:', roleName);
-    this.redirectByRole(roleName);
-  }
-
-  /**
-   * Redirection selon le rôle - CORRIGÉ
-   */
-  private redirectByRole(roleName: string): void {
-    const role = roleName.toLowerCase();
-    let redirectUrl = '/employee/dashboard';
-    
-    console.log('🔄 [REDIRECT] Rôle reçu:', role);
-    
-    switch (role) {
-      case 'admin':
-        redirectUrl = '/admin/dashboard';
-        break;
-      case 'manager':
-        redirectUrl = '/manager/dashboard';
-        break;
-      case 'employee':
-        redirectUrl = '/employee/dashboard';
-        break;
-      default:
-        redirectUrl = '/dashboard';
-    }
-    
-    console.log(`🔄 [REDIRECT] Redirection vers: ${redirectUrl}`);
-    
-    // Utiliser setTimeout pour éviter les problèmes de détection de changement
-    setTimeout(() => {
-      this.router.navigate([redirectUrl]).then(success => {
-        if (success) {
-          console.log('✅ [REDIRECT] Navigation réussie vers', redirectUrl);
-        } else {
-          console.error('❌ [REDIRECT] Échec de navigation vers', redirectUrl);
-          // Fallback: utiliser window.location
-          window.location.href = redirectUrl;
-        }
-      });
-    }, 100);
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
@@ -7,6 +7,7 @@ import { BaseChartDirective } from 'ng2-charts';
 import { interval, Subscription, catchError, of, finalize } from 'rxjs';
 import { AuthService } from '../../../core/services/AuthService/auth';
 import { EmployeeApiService } from "../../../services/employee";
+import { AiScoreService } from '../../../services/ai-score';
 
 Chart.register(...registerables);
 
@@ -67,7 +68,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   };
   leaveValidationErrors: string[] = [];
   
-  // 🔥 Delete confirmation modal
+  // Delete confirmation modal
   showDeleteModal = false;
   deleteRequestId: number | null = null;
   deleteRequestTitle: string = '';
@@ -137,9 +138,39 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   private refreshSubscription?: Subscription;
   private tasksSubscription?: Subscription;
   
+  // ========== ACTIVITY TRACKING ==========
+  private activityInterval: any;
+  private keyboardClicks = 0;
+  private mouseClicks = 0;
+  private currentActivityLevel = 100;
+  public inactiveDisplayMinutes: number = 0;
+  public isUserActive: boolean = true;
+  private lastActivityTime = Date.now();
+  private readonly INACTIVITY_THRESHOLD = 15; // 15 minutes
+  private readonly SEND_INTERVAL = 60000; // 1 minute
+  private inactivityCheckInterval: any;
+  private activityListeners: Map<string, () => void> = new Map();
+  
+  // Activity stats for template
+  public todayMouseClicks: number = 0;
+  public todayKeyboardClicks: number = 0;
+  public todayActivityLevel: number = 0;
+  public todayActivityLogsCount: number = 0;
+  
+  // ========== SCREENSHOTS ==========
+  private screenshotInterval: any;
+  private readonly SCREENSHOT_INTERVAL = 600000; // 10 minutes (600000 ms)
+  
+  // ========== AI SCORE ==========
+  public aiScore: number = 0;
+  public aiLevel: string = '';
+  public aiRecommendations: string[] = [];
+  public isCalculatingScore: boolean = false;
+  
   constructor(
     private apiService: EmployeeApiService,
-    private authService: AuthService
+    private authService: AuthService,
+    private aiScoreService: AiScoreService
   ) {}
   
   ngOnInit(): void {
@@ -149,6 +180,16 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.loadTasks();
     this.loadLeaveRequests();
     this.loadWeeklyStats();
+    this.loadTodayActivityStats();
+    
+    // Démarrer le tracking d'activité
+    this.initActivityTracking();
+    
+    // Démarrer les captures automatiques
+    this.startAutoScreenshots();
+    
+    // Calculer le score IA
+    this.calculateAIScore();
     
     this.refreshSubscription = interval(60000).subscribe(() => {
       console.log('🔄 Auto-refresh des données...');
@@ -166,6 +207,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     if (this.breakInterval) {
       clearInterval(this.breakInterval);
     }
+    if (this.screenshotInterval) {
+      clearInterval(this.screenshotInterval);
+    }
+    
+    // Arrêter le tracking d'activité
+    this.stopActivityTracking();
   }
   
   private isAuthenticated(): boolean {
@@ -690,6 +737,26 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
+  loadTodayActivityStats(): void {
+    this.apiService.getTodayActivityStats().subscribe({
+      next: (response: any) => {
+        if (response && response.success) {
+          this.todayMouseClicks = response.data.total_mouse_clicks || 0;
+          this.todayKeyboardClicks = response.data.total_keyboard_clicks || 0;
+          this.todayActivityLevel = response.data.avg_activity_level || 0;
+          this.todayActivityLogsCount = response.data.logs_count || 0;
+          console.log('📊 Stats activité chargées:', {
+            souris: this.todayMouseClicks,
+            clavier: this.todayKeyboardClicks,
+            niveau: this.todayActivityLevel,
+            logs: this.todayActivityLogsCount
+          });
+        }
+      },
+      error: (err: any) => console.error('Erreur chargement stats activité:', err)
+    });
+  }
+  
   loadMockLeaveRequests(): void {
     this.leaveRequests = [
       { id: 1, type: 'ANNUAL', start_date: '2026-04-10', end_date: '2026-04-15', reason: 'Vacances de printemps', statuts: 'PENDING' }
@@ -697,7 +764,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
   }
   
-  // 🔥 MODIFIER UNE DEMANDE
   editLeaveRequest(leave: any): void {
     if (leave.statuts !== 'PENDING') {
       this.showNotificationMessage('Seules les demandes en attente peuvent être modifiées', 'error');
@@ -715,14 +781,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.showLeaveModal = true;
   }
   
-  // 🔥 OUVRIR LE MODAL DE CONFIRMATION DE SUPPRESSION
   openDeleteModal(id: number, leave: any): void {
     this.deleteRequestId = id;
     this.deleteRequestTitle = `${leave.type} du ${this.formatDate(leave.start_date)} au ${this.formatDate(leave.end_date)}`;
     this.showDeleteModal = true;
   }
   
-  // 🔥 CONFIRMER LA SUPPRESSION
   confirmDelete(): void {
     if (!this.deleteRequestId) return;
     
@@ -737,7 +801,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         this.isLoading = false;
         this.deleteRequestId = null;
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('❌ Erreur suppression:', error);
         this.showNotificationMessage('Erreur lors de la suppression', 'error');
         this.isLoading = false;
@@ -746,14 +810,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  // 🔥 ANNULER LA SUPPRESSION
   cancelDelete(): void {
     this.showDeleteModal = false;
     this.deleteRequestId = null;
     this.deleteRequestTitle = '';
   }
   
-  // 🔥 SUBMIT POUR GÉRER CRÉATION ET MODIFICATION
   submitLeaveRequest(): void {
     if (!this.validateLeaveForm()) return;
 
@@ -766,7 +828,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       reason: this.newLeave.reason || ''
     };
 
-    // Si c'est une modification
     if (this.editingLeaveId) {
       this.apiService.updateLeaveRequest(this.editingLeaveId, leaveData).subscribe({
         next: (response: any) => {
@@ -779,14 +840,13 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
           this.closeLeaveModal();
           this.isLoading = false;
         },
-        error: (error) => {
+        error: (error: any) => {
           console.error('❌ Erreur modification:', error);
           this.showNotificationMessage('Erreur lors de la modification', 'error');
           this.isLoading = false;
         }
       });
     } else {
-      // Sinon c'est une création
       this.apiService.createLeaveRequest(leaveData).subscribe({
         next: (response: any) => {
           this.leaveRequests.unshift(response.data);
@@ -795,7 +855,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
           this.closeLeaveModal();
           this.isLoading = false;
         },
-        error: (error) => {
+        error: (error: any) => {
           console.error('❌ Erreur:', error);
           this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
           this.isLoading = false;
@@ -879,6 +939,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.loadTasks();
     this.loadLeaveRequests();
     this.loadWeeklyStats();
+    this.loadTodayActivityStats();
     setTimeout(() => {
       this.showNotificationMessage('Données rafraîchies!', 'success');
       this.isLoading = false;
@@ -943,5 +1004,203 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.showNotification = false;
     }, 3000);
+  }
+
+  // ========== ACTIVITY TRACKING METHODS ==========
+
+  initActivityTracking(): void {
+    console.log('🖱️ Démarrage du tracking d\'activité');
+    
+    this.lastActivityTime = Date.now();
+    this.setupActivityListeners();
+    this.startPeriodicSend();
+    this.startInactivityChecker();
+  }
+
+  private setupActivityListeners(): void {
+    const activityHandler = () => this.onUserActivity();
+    
+    window.addEventListener('mousemove', activityHandler);
+    window.addEventListener('click', activityHandler);
+    window.addEventListener('keypress', activityHandler);
+    window.addEventListener('scroll', activityHandler);
+    
+    this.activityListeners.set('mousemove', activityHandler);
+    this.activityListeners.set('click', activityHandler);
+    this.activityListeners.set('keypress', activityHandler);
+    this.activityListeners.set('scroll', activityHandler);
+  }
+
+  private onUserActivity(): void {
+    const now = Date.now();
+    
+    this.lastActivityTime = now;
+    
+    if (!this.isUserActive) {
+      this.isUserActive = true;
+      console.log(`🟢 Utilisateur réactivé`);
+    }
+    
+    this.mouseClicks++;
+    this.todayMouseClicks++;
+  }
+
+  private startInactivityChecker(): void {
+    this.inactivityCheckInterval = setInterval(() => {
+      const now = Date.now();
+      const minutesSinceLastActivity = (now - this.lastActivityTime) / 1000 / 60;
+      const roundedMinutes = Math.round(minutesSinceLastActivity * 10) / 10;
+      
+      this.inactiveDisplayMinutes = Math.floor(minutesSinceLastActivity);
+      
+      if (minutesSinceLastActivity >= this.INACTIVITY_THRESHOLD) {
+        this.currentActivityLevel = 0;
+        if (this.isUserActive) {
+          this.isUserActive = false;
+          console.log(`🔴 DÉTECTION D'INACTIVITÉ PROLONGÉE: ${roundedMinutes} minutes sans activité`);
+        }
+      } else {
+        const activityPercent = 100 - (minutesSinceLastActivity / this.INACTIVITY_THRESHOLD) * 100;
+        this.currentActivityLevel = Math.max(0, Math.min(100, Math.round(activityPercent)));
+      }
+      
+      if (minutesSinceLastActivity > 10 && minutesSinceLastActivity < 15 && this.isUserActive) {
+        console.log(`⚠️ Attention: ${roundedMinutes} minutes d'inactivité, bientôt détection...`);
+      }
+      
+    }, 10000);
+  }
+
+  private startPeriodicSend(): void {
+    this.activityInterval = setInterval(() => {
+      if (this.isCheckedIn && !this.isCheckedOut) {
+        
+        console.log(`📊 [ACTIVITY] Envoi log - Souris: ${this.mouseClicks}, Clavier: ${this.keyboardClicks}, Niveau: ${this.currentActivityLevel}%, Inactif: ${!this.isUserActive}`);
+        
+        this.apiService.sendActivityLog({
+          keyboard_clicks: this.keyboardClicks,
+          mouse_clicks: this.mouseClicks,
+          activity_level: this.currentActivityLevel,
+          projectId: undefined
+        }).subscribe({
+          next: () => {
+            this.keyboardClicks = 0;
+            this.mouseClicks = 0;
+          },
+          error: (err: any) => console.error('❌ Erreur envoi log:', err)
+        });
+      } else {
+        this.keyboardClicks = 0;
+        this.mouseClicks = 0;
+      }
+    }, this.SEND_INTERVAL);
+  }
+
+  private stopActivityTracking(): void {
+    if (this.activityInterval) {
+      clearInterval(this.activityInterval);
+      this.activityInterval = null;
+    }
+    if (this.inactivityCheckInterval) {
+      clearInterval(this.inactivityCheckInterval);
+      this.inactivityCheckInterval = null;
+    }
+    
+    this.activityListeners.forEach((handler, event) => {
+      window.removeEventListener(event, handler);
+    });
+    this.activityListeners.clear();
+    
+    console.log('🛑 Tracking d\'activité arrêté');
+  }
+
+  // ========== SCREENSHOTS METHODS ==========
+
+  startAutoScreenshots(): void {
+    console.log('📸 Démarrage des captures automatiques toutes les 10 minutes');
+    this.screenshotInterval = setInterval(() => {
+      if (this.isCheckedIn && !this.isCheckedOut) {
+        this.captureScreenshot();
+      } else {
+        console.log('📸 Capture ignorée - utilisateur non check-in');
+      }
+    }, this.SCREENSHOT_INTERVAL);
+  }
+
+  async captureScreenshot(): Promise<void> {
+    try {
+      console.log('📸 Capture d\'écran en cours...');
+      
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default;
+      
+      const canvas = await html2canvas(document.body, {
+        scale: 0.5,
+        logging: false,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imageData = canvas.toDataURL('image/png');
+      
+      this.apiService.captureAndCompare(imageData, null).subscribe({
+        next: (response: any) => {
+          if (response && response.success) {
+            console.log(`✅ Capture sauvegardée - ${response.message}`);
+            if (response.is_identical) {
+              console.log(`📊 Similarité: ${response.similarity_score}% - Capture identique, ancienne supprimée`);
+            }
+          }
+        },
+        error: (err: any) => {
+          console.error('❌ Erreur lors de l\'envoi de la capture:', err);
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Erreur capture écran:', error);
+    }
+  }
+
+  // ========== AI SCORE METHODS ==========
+
+  calculateAIScore(): void {
+    this.isCalculatingScore = true;
+    
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+    
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    
+    console.log('🤖 Calcul du score IA pour la période:', startDateStr, '→', endDateStr);
+    
+    this.apiService.exportForAI(startDateStr, endDateStr).subscribe({
+      next: (response: any) => {
+        if (response && response.success) {
+          console.log('📊 Données exportées avec succès');
+          
+          this.aiScoreService.calculateScore(response.data).subscribe({
+            next: (result: any) => {
+              this.aiScore = result.score;
+              this.aiLevel = result.level;
+              this.aiRecommendations = result.recommendations;
+              this.isCalculatingScore = false;
+              console.log(`🤖 Score IA: ${this.aiScore}% - ${this.aiLevel}`);
+              console.log('📝 Recommandations:', this.aiRecommendations);
+            },
+            error: (err: any) => {
+              console.error('❌ Erreur calcul IA:', err);
+              this.isCalculatingScore = false;
+            }
+          });
+        }
+      },
+      error: (err: any) => {
+        console.error('❌ Erreur export données:', err);
+        this.isCalculatingScore = false;
+      }
+    });
   }
 }

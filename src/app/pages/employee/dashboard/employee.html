@@ -6,7 +6,7 @@
       <div class="logo">
         <div class="logo-icon">👤</div>
         <div class="logo-text">
-          <h1>Mon<span>Espace</span></h1>
+          <h1>Remote<span>Work</span></h1>
           <p>{{ user?.username || 'Employé' }}</p>
         </div>
       </div>
@@ -15,6 +15,27 @@
       <div class="date-display">
         <span class="date-icon">📅</span>
         <span>{{ currentDate | date:'EEEE d MMMM yyyy' }}</span>
+      </div>
+      <!-- User Menu -->
+      <div class="user-menu" (click)="toggleUserMenu()">
+        <div class="user-avatar">
+          <span class="avatar-text">{{ (user?.username || 'E').charAt(0).toUpperCase() }}</span>
+        </div>
+        <span class="user-name">{{ user?.username || 'Employé' }}</span>
+        <span class="menu-arrow" [class.rotated]="isUserMenuOpen">▼</span>
+        
+        <!-- Dropdown Menu -->
+        <div class="dropdown-menu" *ngIf="isUserMenuOpen">
+          <a class="dropdown-item" (click)="goToProfile()">
+            <span class="dropdown-icon">👤</span>
+            <span>Mon Profil</span>
+          </a>
+          <div class="dropdown-divider"></div>
+          <a class="dropdown-item logout" (click)="logout()">
+            <span class="dropdown-icon">🚪</span>
+            <span>Déconnexion</span>
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -74,6 +95,135 @@
         <div class="stat-value">{{ tasksCompleted }}/{{ totalTasks }}</div>
         <div class="stat-label">Tâches complétées</div>
       </div>
+    </div>
+  </div>
+
+  <!-- AI SCORE CARD -->
+  <div class="ai-score-card">
+    <div class="card-header">
+      <div>
+        <h3>🤖 Score IA de Productivité</h3>
+        <p>Analyse intelligente de votre performance</p>
+      </div>
+      <button class="refresh-ai-btn" (click)="calculateAIScore()" [disabled]="isCalculatingScore" title="Rafraîchir le score">
+        <span class="refresh-icon">🔄</span>
+        {{ isCalculatingScore ? 'Calcul...' : 'Actualiser' }}
+      </button>
+    </div>
+    <div class="ai-score-content" *ngIf="aiScore > 0; else noAiScore">
+      <div class="ai-score-circle">
+        <div class="score-value">{{ aiScore }}%</div>
+        <div class="score-label">Score global</div>
+        <div class="score-level" [ngClass]="{
+          'level-high': aiScore >= 80,
+          'level-medium': aiScore >= 60 && aiScore < 80,
+          'level-low': aiScore < 60
+        }">
+          {{ aiLevel }}
+        </div>
+      </div>
+      <div class="ai-score-details">
+        <div class="detail-item">
+          <span class="detail-icon">📈</span>
+          <span class="detail-label">Productivité</span>
+          <span class="detail-value">{{ aiScore }}%</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-icon">🎯</span>
+          <span class="detail-label">Activité</span>
+          <span class="detail-value">{{ todayActivityLevel }}%</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-icon">✅</span>
+          <span class="detail-label">Tâches</span>
+          <span class="detail-value">{{ tasksCompleted }}/{{ totalTasks }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-icon">⏰</span>
+          <span class="detail-label">Présence</span>
+          <span class="detail-value">{{ workHoursToday }}h</span>
+        </div>
+      </div>
+    </div>
+    <div class="ai-recommendations" *ngIf="aiRecommendations.length > 0">
+      <div class="recommendations-header">
+        <span class="recommendations-icon">💡</span>
+        <span>Recommandations personnalisées</span>
+      </div>
+      <ul class="recommendations-list">
+        <li *ngFor="let rec of aiRecommendations">
+          <span class="rec-icon">✨</span>
+          {{ rec }}
+        </li>
+      </ul>
+    </div>
+    <ng-template #noAiScore>
+      <div class="ai-score-placeholder">
+        <div class="placeholder-icon">🤖</div>
+        <p>Cliquez sur "Actualiser" pour calculer votre score IA</p>
+        <p class="placeholder-hint">Analyse des 7 derniers jours</p>
+      </div>
+    </ng-template>
+  </div>
+
+  <!-- Activity Stats Card -->
+  <div class="activity-stats-card">
+    <div class="card-header">
+      <div>
+        <h3>🖱️ Activité en temps réel</h3>
+        <p>Suivi de votre activité aujourd'hui</p>
+      </div>
+      <div class="activity-indicator" [class.active]="isUserActive" [class.inactive]="!isUserActive">
+        <span class="indicator-dot"></span>
+        <span class="indicator-text">{{ isUserActive ? 'Actif' : 'Inactif' }}</span>
+      </div>
+    </div>
+    <div class="activity-stats">
+      <div class="activity-stat">
+        <div class="activity-icon">🖱️</div>
+        <div class="activity-info">
+          <div class="activity-value">{{ todayMouseClicks || 0 }}</div>
+          <div class="activity-label">Clicks souris</div>
+        </div>
+      </div>
+      <div class="activity-stat">
+        <div class="activity-icon">⌨️</div>
+        <div class="activity-info">
+          <div class="activity-value">{{ todayKeyboardClicks || 0 }}</div>
+          <div class="activity-label">Clicks clavier</div>
+        </div>
+      </div>
+      <div class="activity-stat">
+        <div class="activity-icon">📊</div>
+        <div class="activity-info">
+          <div class="activity-value">{{ todayActivityLevel || 0 }}%</div>
+          <div class="activity-label">Niveau d'activité</div>
+        </div>
+      </div>
+      <div class="activity-stat">
+        <div class="activity-icon">📝</div>
+        <div class="activity-info">
+          <div class="activity-value">{{ todayActivityLogsCount || 0 }}</div>
+          <div class="activity-label">Logs envoyés</div>
+        </div>
+      </div>
+    </div>
+    <div class="activity-progress">
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="todayActivityLevel || 0"></div>
+      </div>
+      <div class="progress-labels">
+        <span>Inactif</span>
+        <span>Peu actif</span>
+        <span>Actif</span>
+        <span>Très actif</span>
+      </div>
+    </div>
+    <div class="inactivity-warning" *ngIf="inactiveDisplayMinutes >= 10 && inactiveDisplayMinutes < 15">
+      ⚠️ Attention: {{ inactiveDisplayMinutes }} minutes d'inactivité
+    </div>
+    <div class="inactivity-alert" *ngIf="inactiveDisplayMinutes >= 15">
+      🔴 Détection d'inactivité prolongée: {{ inactiveDisplayMinutes }} minutes
     </div>
   </div>
 
@@ -147,24 +297,6 @@
     </div>
   </div>
 
-  <!-- Weekly Performance Chart -->
-  <div class="chart-card">
-    <div class="card-header">
-      <div>
-        <h3>📊 Performance hebdomadaire</h3>
-        <p>Évolution de votre productivité</p>
-      </div>
-    </div>
-    <div class="chart-container">
-      <canvas 
-        baseChart
-        [data]="weeklyData"
-        [options]="chartOptions"
-        type="line">
-      </canvas>
-    </div>
-  </div>
-
   <!-- Leave Request Section -->
   <div class="leave-card">
     <div class="card-header">
@@ -201,7 +333,6 @@
           {{ getLeaveStatusLabel(request.statuts) }}
         </div>
         
-        <!-- 🔥 BOUTONS MODIFIER ET SUPPRIMER (uniquement pour PENDING) -->
         <div class="leave-actions" *ngIf="request.statuts === 'PENDING'">
           <button class="btn-edit" (click)="editLeaveRequest(request)" title="Modifier">
             ✏️
@@ -224,9 +355,12 @@
     <button class="fab-btn" (click)="refreshData()" [class.loading]="isLoading" title="Rafraîchir">
       🔄
     </button>
+    <button class="fab-btn ai-fab" (click)="calculateAIScore()" [class.loading]="isCalculatingScore" title="Calculer score IA">
+      🤖
+    </button>
   </div>
 
-  <!-- Leave Request Modal (Création/Modification) -->
+  <!-- Leave Request Modal -->
   <div class="modal" [class.show]="showLeaveModal" (click)="closeModal($event)">
     <div class="modal-content">
       <div class="modal-header">
@@ -277,7 +411,7 @@
     </div>
   </div>
 
-  <!-- 🔥 DELETE CONFIRMATION MODAL -->
+  <!-- Delete Confirmation Modal -->
   <div class="modal delete-modal" [class.show]="showDeleteModal" (click)="cancelDelete()">
     <div class="modal-content delete-modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header delete-header">

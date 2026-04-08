@@ -64,7 +64,8 @@ export class LoginPage implements OnInit, OnDestroy {
     this.selectedRole = role;
   }
 
-  // Dans votre login-page.ts
+  // login-page.ts
+// login-page.ts - Modifiez la méthode login()
 login(): void {
   if (this.loginForm.invalid) {
     this.loginForm.markAllAsTouched();
@@ -83,43 +84,17 @@ login(): void {
     next: (response) => {
       console.log('🟢 Connexion réussie!', response);
       
-      // FORCER LE RÔLE MANUELLEMENT
-      // Si l'email contient 'manager', forcer le rôle manager
-      if (email.toLowerCase().includes('manager')) {
-        console.log('⚠️ Email contient "manager", forcing role...');
-        const userData = {
-          id: response.user.id,
-          email: response.user.email,
-          username: response.user.username,
-          role: { id: 2, name: 'manager', type: 'manager' }
-        };
-        
-        // Mettre à jour localStorage
-        localStorage.setItem('userRole', 'manager');
-        localStorage.setItem('user', JSON.stringify({
-          id: response.user.id,
-          email: response.user.email,
-          username: response.user.username,
-          role: 'manager'
-        }));
-        
-        // Mettre à jour authData
-        const authData = {
-          jwt: response.jwt,
-          user: userData
-        };
-        localStorage.setItem('authData', JSON.stringify(authData));
-        
-        // Forcer la redirection vers manager
-        console.log('🔄 Redirection forcée vers manager/dashboard');
-        this.router.navigate(['/manager/dashboard']).then(() => {
-          this.isLoading = false;
-          this.loginForm.enable();
-        });
-      } else {
-        this.isLoading = false;
-        this.loginForm.enable();
-      }
+      // 🔥 Récupérer le rôle depuis localStorage
+      const role = localStorage.getItem('userRole') || 'employee';
+      console.log(`🎭 Rôle pour redirection: ${role}`);
+      
+      this.isLoading = false;
+      this.loginForm.enable();
+      
+      // 🔥 Redirection manuelle
+      setTimeout(() => {
+        window.location.href = `/${role}/dashboard`;
+      }, 100);
     },
     error: (error) => {
       console.log('🔴 Erreur de connexion:', error);
