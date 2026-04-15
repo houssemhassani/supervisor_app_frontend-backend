@@ -1,0 +1,79 @@
+<!-- src/app/pages/manager/project-form/project-form.html -->
+<div class="project-form-container">
+  <div class="form-header">
+    <h2>{{ title }}</h2>
+    <button class="close-btn" mat-icon-button (click)="onCancel()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
+    <div class="form-body">
+      <!-- Nom du projet -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Nom du projet</mat-label>
+        <input matInput formControlName="name" placeholder="Ex: Application Mobile">
+        <mat-error *ngIf="nameControl?.invalid && nameControl?.touched">
+          Le nom est requis (minimum 3 caractères)
+        </mat-error>
+      </mat-form-field>
+
+      <!-- Description -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="5" 
+                  placeholder="Décrivez le projet en détail..."></textarea>
+        <mat-error *ngIf="descriptionControl?.invalid && descriptionControl?.touched">
+          La description est requise
+        </mat-error>
+      </mat-form-field>
+
+      <div class="form-row">
+        <!-- Statut -->
+        <mat-form-field appearance="outline">
+          <mat-label>Statut</mat-label>
+          <mat-select formControlName="statuts">
+            <mat-option *ngFor="let s of statuses" [value]="s.value">
+              <div class="status-option" [ngClass]="s.value.toLowerCase()">
+                {{ s.label }}
+              </div>
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <!-- Date début -->
+        <mat-form-field appearance="outline">
+          <mat-label>Date de début</mat-label>
+          <input matInput [matDatepicker]="startPicker" formControlName="start_date">
+          <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+          <mat-datepicker #startPicker></mat-datepicker>
+        </mat-form-field>
+
+        <!-- Date fin -->
+        <mat-form-field appearance="outline">
+          <mat-label>Date de fin</mat-label>
+          <input matInput [matDatepicker]="endPicker" formControlName="end_date">
+          <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+          <mat-datepicker #endPicker></mat-datepicker>
+        </mat-form-field>
+      </div>
+
+      <!-- Membres (optionnel) -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Membres (IDs séparés par des virgules)</mat-label>
+        <input matInput formControlName="users" placeholder="Ex: 1,2,3">
+        <mat-hint>IDs des utilisateurs assignés au projet</mat-hint>
+      </mat-form-field>
+    </div>
+
+    <div class="form-footer">
+      <button type="button" mat-button class="cancel-btn" (click)="onCancel()">
+        Annuler
+      </button>
+      <button type="submit" mat-raised-button class="submit-btn" [disabled]="projectForm.invalid || isLoading">
+        <mat-spinner diameter="20" *ngIf="isLoading"></mat-spinner>
+        <span *ngIf="!isLoading">{{ data?.project ? 'Modifier' : 'Créer' }}</span>
+      </button>
+    </div>
+  </form>
+</div>

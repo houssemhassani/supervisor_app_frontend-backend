@@ -1,0 +1,92 @@
+<!-- src/app/pages/manager/task-form/task-form.html -->
+<div class="task-form-container">
+  <div class="form-header">
+    <h2>{{ title }}</h2>
+    <button class="close-btn" mat-icon-button (click)="onCancel()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <form [formGroup]="taskForm" (ngSubmit)="onSubmit()">
+    <div class="form-body">
+      <!-- Titre -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Titre de la tâche</mat-label>
+        <input matInput formControlName="title" placeholder="Ex: Développer le dashboard">
+        <mat-error *ngIf="titleControl?.invalid && titleControl?.touched">
+          Le titre est requis (minimum 3 caractères)
+        </mat-error>
+      </mat-form-field>
+
+      <!-- Description -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="4" 
+                  placeholder="Décrivez la tâche en détail..."></textarea>
+        <mat-error *ngIf="descriptionControl?.invalid && descriptionControl?.touched">
+          La description est requise
+        </mat-error>
+      </mat-form-field>
+
+      <div class="form-row">
+        <!-- Priorité -->
+        <mat-form-field appearance="outline">
+          <mat-label>Priorité</mat-label>
+          <mat-select formControlName="priority">
+            <mat-option *ngFor="let p of priorities" [value]="p.value">
+              <div class="priority-option" [ngClass]="p.value.toLowerCase()">
+                <span class="priority-dot"></span>
+                {{ p.label }}
+              </div>
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <!-- Statut -->
+        <mat-form-field appearance="outline">
+          <mat-label>Statut</mat-label>
+          <mat-select formControlName="statuts">
+            <mat-option *ngFor="let s of statuses" [value]="s.value">
+              <div class="status-option" [ngClass]="s.value.toLowerCase()">
+                {{ s.label }}
+              </div>
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <!-- Date d'échéance -->
+        <mat-form-field appearance="outline">
+          <mat-label>Date d'échéance</mat-label>
+          <input matInput [matDatepicker]="picker" formControlName="due_date">
+          <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+          <mat-datepicker #picker></mat-datepicker>
+          <mat-error *ngIf="dueDateControl?.invalid && dueDateControl?.touched">
+            La date d'échéance est requise
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <!-- Assigné à (optionnel) -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Assigné à (ID utilisateur)</mat-label>
+        <input matInput formControlName="assigned_to" type="number" placeholder="ID de l'utilisateur">
+      </mat-form-field>
+
+      <!-- Projet (optionnel) -->
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Projet (ID)</mat-label>
+        <input matInput formControlName="project" type="number" placeholder="ID du projet">
+      </mat-form-field>
+    </div>
+
+    <div class="form-footer">
+      <button type="button" mat-button class="cancel-btn" (click)="onCancel()">
+        Annuler
+      </button>
+      <button type="submit" mat-raised-button class="submit-btn" [disabled]="taskForm.invalid || isLoading">
+        <mat-spinner diameter="20" *ngIf="isLoading"></mat-spinner>
+        <span *ngIf="!isLoading">{{ data?.task ? 'Modifier' : 'Créer' }}</span>
+      </button>
+    </div>
+  </form>
+</div>

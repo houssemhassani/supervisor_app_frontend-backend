@@ -1,0 +1,84 @@
+// src/app/pages/manager/project-form/project-form.scss
+.project-form-container {
+  padding: 20px;
+  min-width: 550px;
+  max-width: 750px;
+  background: #1a1a2e;
+  border-radius: 24px;
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+  h2 {
+    color: white;
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .close-btn {
+    color: rgba(255, 255, 255, 0.6);
+  }
+}
+
+.form-body {
+  .full-width {
+    width: 100%;
+    margin-bottom: 16px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+}
+
+.status-option {
+  &.planned { color: #3b82f6; }
+  &.in_progress { color: #f59e0b; }
+  &.completed { color: #22c55e; }
+  &.cancelled { color: #ef4444; }
+}
+
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+  .cancel-btn {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .submit-btn {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    min-width: 120px;
+  }
+}
+
+::ng-deep .mat-mdc-form-field {
+  .mdc-text-field--outlined .mdc-notched-outline__leading,
+  .mdc-text-field--outlined .mdc-notched-outline__notch,
+  .mdc-text-field--outlined .mdc-notched-outline__trailing {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .mdc-floating-label {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .mdc-text-field__input {
+    color: white;
+  }
+}

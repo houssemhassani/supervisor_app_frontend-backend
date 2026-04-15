@@ -147,8 +147,7 @@ login(): void {
       case 'EMPLOYEE':
         this.router.navigate(['/employee/dashboard']);
         break;
-      default:
-        this.router.navigate(['/dashboard']);
+      
     }
   }
 }

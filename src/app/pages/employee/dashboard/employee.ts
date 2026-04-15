@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
 import { interval, Subscription, catchError, of, finalize } from 'rxjs';
@@ -167,10 +168,14 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   public aiRecommendations: string[] = [];
   public isCalculatingScore: boolean = false;
   
+  // ========== USER MENU ==========
+  public isUserMenuOpen: boolean = false;
+  
   constructor(
     private apiService: EmployeeApiService,
     private authService: AuthService,
-    private aiScoreService: AiScoreService
+    private aiScoreService: AiScoreService,
+    private router: Router
   ) {}
   
   ngOnInit(): void {
@@ -240,6 +245,22 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         id: 1
       };
     }
+  }
+  
+  // ========== USER MENU METHODS ==========
+  
+  toggleUserMenu(): void {
+    this.isUserMenuOpen = !this.isUserMenuOpen;
+  }
+  
+  goToProfile(): void {
+    this.isUserMenuOpen = false;
+    this.router.navigate(['/employee/profile']);
+  }
+  
+  logout(): void {
+    this.isUserMenuOpen = false;
+    this.authService.logout();
   }
   
   // ========== FORMATAGE DES DATES ==========

@@ -1,0 +1,157 @@
+<!-- src/app/pages/manager/task-list/task-list.html -->
+<div class="task-list-container">
+  <!-- Header -->
+  <div class="list-header">
+    <div class="header-title">
+      <h3>{{ title }}</h3>
+      <p>{{ subtitle }}</p>
+    </div>
+    <div class="header-stats">
+      <div class="stat-badge">
+        <span class="stat-value">{{ getStats().total }}</span>
+        <span class="stat-label">Total</span>
+      </div>
+      <div class="stat-badge todo">
+        <span class="stat-value">{{ getStats().todo }}</span>
+        <span class="stat-label">À faire</span>
+      </div>
+      <div class="stat-badge in-progress">
+        <span class="stat-value">{{ getStats().inProgress }}</span>
+        <span class="stat-label">En cours</span>
+      </div>
+      <div class="stat-badge done">
+        <span class="stat-value">{{ getStats().done }}</span>
+        <span class="stat-label">Terminé</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress Bar -->
+  <div class="progress-section">
+    <div class="progress-info">
+      <span>Progression globale</span>
+      <span>{{ getProgressPercentage().toFixed(0) }}%</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" [style.width.%]="getProgressPercentage()"></div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-section">
+    <div class="search-box">
+      <mat-icon>search</mat-icon>
+      <input type="text" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" 
+             placeholder="Rechercher une tâche...">
+    </div>
+
+    <div class="filter-group">
+      <select [(ngModel)]="selectedStatus" (ngModelChange)="applyFilters()" class="filter-select">
+        <option *ngFor="let s of statuses" [value]="s.value">
+          {{ s.label }}
+        </option>
+      </select>
+
+      <select [(ngModel)]="selectedPriority" (ngModelChange)="applyFilters()" class="filter-select">
+        <option *ngFor="let p of priorities" [value]="p.value">
+          {{ p.label }}
+        </option>
+      </select>
+
+      <button class="clear-btn" (click)="clearFilters()" *ngIf="searchTerm || selectedStatus !== 'ALL' || selectedPriority !== 'ALL'">
+        <mat-icon>clear</mat-icon>
+        Effacer
+      </button>
+    </div>
+
+    <div class="sort-buttons">
+      <button class="sort-btn" [class.active]="sortBy === 'due_date'" (click)="changeSort('due_date')">
+        Date
+        <mat-icon *ngIf="sortBy === 'due_date'">{{ sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+      </button>
+      <button class="sort-btn" [class.active]="sortBy === 'priority'" (click)="changeSort('priority')">
+        Priorité
+        <mat-icon *ngIf="sortBy === 'priority'">{{ sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+      </button>
+      <button class="sort-btn" [class.active]="sortBy === 'title'" (click)="changeSort('title')">
+        Titre
+        <mat-icon *ngIf="sortBy === 'title'">{{ sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tasks List -->
+  <div class="tasks-list" *ngIf="filteredTasks.length > 0; else noData">
+    <div class="task-card" *ngFor="let task of filteredTasks" [class]="task.priority.toLowerCase()">
+      <div class="task-header">
+        <div class="task-status">
+          <div class="status-select">
+            <select [(ngModel)]="task.statuts" (ngModelChange)="updateStatus(task, $event)" 
+                    [disabled]="!showActions">
+              <option value="TODO">À faire</option>
+              <option value="IN_PROGRESS">En cours</option>
+              <option value="DONE">Terminé</option>
+            </select>
+          </div>
+        </div>
+        <div class="task-actions" *ngIf="showActions">
+          <button class="action-btn" (click)="onView.emit(task)" matTooltip="Voir détails">
+            <mat-icon>visibility</mat-icon>
+          </button>
+          <button class="action-btn edit" (click)="onEdit.emit(task)" matTooltip="Modifier">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button class="action-btn delete" (click)="onDelete.emit(task)" matTooltip="Supprimer">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <div class="task-body">
+        <h4 class="task-title">{{ task.title }}</h4>
+        <p class="task-description">{{ task.description }}</p>
+        
+        <div class="task-meta">
+          <div class="meta-item priority" [class]="task.priority.toLowerCase()">
+            <mat-icon>{{ getPriorityIcon(task.priority) }}</mat-icon>
+            <span>{{ getPriorityLabel(task.priority) }}</span>
+          </div>
+          <div class="meta-item due-date" [class.overdue]="isOverdue(task.due_date)">
+            <mat-icon>event</mat-icon>
+            <span>{{ formatDate(task.due_date) }}</span>
+            <span class="overdue-badge" *ngIf="isOverdue(task.due_date) && task.statuts !== 'DONE'">
+              En retard
+            </span>
+          </div>
+        </div>
+
+        <div class="task-assignments" *ngIf="showUserInfo && task.assigned_to">
+          <div class="assignee">
+            <div class="assignee-avatar">
+              {{ task.assigned_to.username?.charAt(0)?.toUpperCase() || 'U' }}
+            </div>
+            <span>{{ task.assigned_to.username }}</span>
+          </div>
+        </div>
+
+        <div class="task-project" *ngIf="showProjectInfo && task.project">
+          <mat-icon>folder</mat-icon>
+          <span>{{ task.project.name }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- No Data -->
+  <ng-template #noData>
+    <div class="no-data">
+      <mat-icon>inbox</mat-icon>
+      <h4>Aucune tâche trouvée</h4>
+      <p>Aucune tâche ne correspond à vos critères</p>
+      <button class="clear-btn" (click)="clearFilters()" *ngIf="searchTerm || selectedStatus !== 'ALL' || selectedPriority !== 'ALL'">
+        <mat-icon>refresh</mat-icon>
+        Réinitialiser les filtres
+      </button>
+    </div>
+  </ng-template>
+</div>

@@ -1,3 +1,4 @@
+<!-- src/app/pages/manager/manager-dashboard/manager-dashboard.html -->
 <div class="manager-dashboard">
 
   <!-- HEADER -->
@@ -13,7 +14,7 @@
     </div>
 
     <div class="header-actions">
-      <button mat-raised-button color="primary" (click)="openCreateDialog()">
+      <button mat-raised-button color="primary" (click)="openCreateLeaveDialog()">
         <mat-icon>add</mat-icon>
         Nouvelle demande
       </button>
@@ -71,7 +72,7 @@
     <div class="stat-card">
       <mat-icon>schedule</mat-icon>
       <div>
-        <h2>{{ getAverageResponseTime() }}</h2>
+        <h2>{{ getLeaveAverageResponseTime() }}</h2>
         <p>Temps réponse</p>
       </div>
     </div>
@@ -87,8 +88,6 @@
         <mat-icon>pie_chart</mat-icon>
         <h3>Répartition des demandes</h3>
       </div>
-
-      
     </div>
 
     <!-- TYPES -->
@@ -161,24 +160,23 @@
     <div class="tabs-header">
 
       <button
-        [class.active]="activeTab === 'myRequests'"
-        (click)="switchTab('myRequests')">
+        [class.active]="leaveSubTab === 'myRequests'"
+        (click)="switchLeaveSubTab('myRequests')">
 
         <mat-icon>person</mat-icon>
         Mes demandes
 
-       
       </button>
 
       <button
-        [class.active]="activeTab === 'allRequests'"
-        (click)="switchTab('allRequests')">
+        [class.active]="leaveSubTab === 'allRequests'"
+        (click)="switchLeaveSubTab('allRequests')">
 
         <mat-icon>people</mat-icon>
         Toutes
 
-        <span *ngIf="getTotalPendingActions()" class="badge warning">
-          {{ getTotalPendingActions() }}
+        <span *ngIf="getTotalPendingLeaveRequests()" class="badge warning">
+          {{ getTotalPendingLeaveRequests() }}
         </span>
       </button>
 
@@ -188,7 +186,7 @@
     <div class="tabs-content">
 
       <!-- MY REQUESTS -->
-      <div *ngIf="activeTab === 'myRequests'">
+      <div *ngIf="leaveSubTab === 'myRequests'">
 
         <app-leave-request-list
           title="Mes demandes"
@@ -198,16 +196,16 @@
           [showUserInfo]="false"
           [showFilters]="true"
           [showStats]="true"
-          (onEdit)="openEditDialog($event)"
+          (onEdit)="openEditLeaveDialog($event)"
           (onDelete)="deleteLeaveRequest($event)"
-          (onViewDetails)="openViewDialog($event)"
-          (onCancel)="cancelRequest($event)">
+          (onViewDetails)="viewLeaveDetails($event)"
+          (onCancel)="cancelLeaveRequest($event)">
         </app-leave-request-list>
 
       </div>
 
       <!-- ALL REQUESTS -->
-      <div *ngIf="activeTab === 'allRequests'">
+      <div *ngIf="leaveSubTab === 'allRequests'">
 
         <app-leave-request-list
           title="Toutes les demandes"
@@ -217,9 +215,9 @@
           [showUserInfo]="true"
           [showFilters]="true"
           [showStats]="true"
-          (onViewDetails)="openViewDialog($event)"
-          (onApprove)="approveRequest($event)"
-          (onReject)="rejectRequest($event)">
+          (onViewDetails)="viewLeaveDetails($event)"
+          (onApprove)="approveLeaveRequest($event)"
+          (onReject)="rejectLeaveRequest($event)">
         </app-leave-request-list>
 
       </div>

@@ -3,19 +3,25 @@
   <!-- Header -->
   <div class="dashboard-header">
     <div class="header-left">
-      <div class="logo">
-        <div class="logo-icon">👤</div>
-        <div class="logo-text">
-          <h1>Remote<span>Work</span></h1>
-          <p>{{ user?.username || 'Employé' }}</p>
-        </div>
-      </div>
+  <div class="logo">
+    <div class="logo-icon">
+      <img src="assets/logo site.png" alt="Logo" class="logo-img">
     </div>
+    <div class="logo-text">
+      <h1>Remote<span>Work</span></h1>
+      <p>{{ user?.username || 'Employé' }}</p>
+    </div>
+  </div>
+  <br>
+  <br>
+  <br><br><br><br><br><br>
+</div>
     <div class="header-right">
       <div class="date-display">
         <span class="date-icon">📅</span>
         <span>{{ currentDate | date:'EEEE d MMMM yyyy' }}</span>
       </div>
+      
       <!-- User Menu -->
       <div class="user-menu" (click)="toggleUserMenu()">
         <div class="user-avatar">
@@ -101,19 +107,33 @@
   <!-- AI SCORE CARD -->
   <div class="ai-score-card">
     <div class="card-header">
-      <div>
-        <h3>🤖 Score IA de Productivité</h3>
-        <p>Analyse intelligente de votre performance</p>
+      <div class="header-title">
+        <div class="title-icon">🤖</div>
+        <div>
+          <h3>Score IA de Productivité</h3>
+          <p>Analyse intelligente de votre performance</p>
+        </div>
       </div>
       <button class="refresh-ai-btn" (click)="calculateAIScore()" [disabled]="isCalculatingScore" title="Rafraîchir le score">
         <span class="refresh-icon">🔄</span>
         {{ isCalculatingScore ? 'Calcul...' : 'Actualiser' }}
       </button>
     </div>
+    
     <div class="ai-score-content" *ngIf="aiScore > 0; else noAiScore">
       <div class="ai-score-circle">
+        <svg class="progress-ring" width="140" height="140">
+          <circle class="progress-ring-bg" r="60" cx="70" cy="70" stroke="rgba(255,255,255,0.2)" stroke-width="8" fill="transparent"/>
+          <circle class="progress-ring-fill" r="60" cx="70" cy="70" stroke="url(#gradient)" stroke-width="8" fill="transparent"
+                  [attr.stroke-dasharray]="377" [attr.stroke-dashoffset]="377 * (1 - aiScore / 100)"/>
+          <defs>
+            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#667eea"/>
+              <stop offset="100%" stop-color="#764ba2"/>
+            </linearGradient>
+          </defs>
+        </svg>
         <div class="score-value">{{ aiScore }}%</div>
-        <div class="score-label">Score global</div>
         <div class="score-level" [ngClass]="{
           'level-high': aiScore >= 80,
           'level-medium': aiScore >= 60 && aiScore < 80,
@@ -122,29 +142,39 @@
           {{ aiLevel }}
         </div>
       </div>
+      
       <div class="ai-score-details">
         <div class="detail-item">
-          <span class="detail-icon">📈</span>
-          <span class="detail-label">Productivité</span>
-          <span class="detail-value">{{ aiScore }}%</span>
+          <div class="detail-icon">📈</div>
+          <div class="detail-info">
+            <div class="detail-label">Productivité</div>
+            <div class="detail-value">{{ aiScore }}%</div>
+          </div>
         </div>
         <div class="detail-item">
-          <span class="detail-icon">🎯</span>
-          <span class="detail-label">Activité</span>
-          <span class="detail-value">{{ todayActivityLevel }}%</span>
+          <div class="detail-icon">🎯</div>
+          <div class="detail-info">
+            <div class="detail-label">Activité</div>
+            <div class="detail-value">{{ todayActivityLevel }}%</div>
+          </div>
         </div>
         <div class="detail-item">
-          <span class="detail-icon">✅</span>
-          <span class="detail-label">Tâches</span>
-          <span class="detail-value">{{ tasksCompleted }}/{{ totalTasks }}</span>
+          <div class="detail-icon">✅</div>
+          <div class="detail-info">
+            <div class="detail-label">Tâches</div>
+            <div class="detail-value">{{ tasksCompleted }}/{{ totalTasks }}</div>
+          </div>
         </div>
         <div class="detail-item">
-          <span class="detail-icon">⏰</span>
-          <span class="detail-label">Présence</span>
-          <span class="detail-value">{{ workHoursToday }}h</span>
+          <div class="detail-icon">⏰</div>
+          <div class="detail-info">
+            <div class="detail-label">Présence</div>
+            <div class="detail-value">{{ workHoursToday }}h</div>
+          </div>
         </div>
       </div>
     </div>
+    
     <div class="ai-recommendations" *ngIf="aiRecommendations.length > 0">
       <div class="recommendations-header">
         <span class="recommendations-icon">💡</span>
@@ -152,11 +182,12 @@
       </div>
       <ul class="recommendations-list">
         <li *ngFor="let rec of aiRecommendations">
-          <span class="rec-icon">✨</span>
-          {{ rec }}
+          <span class="rec-bullet">✨</span>
+          <span class="rec-text">{{ rec }}</span>
         </li>
       </ul>
     </div>
+    
     <ng-template #noAiScore>
       <div class="ai-score-placeholder">
         <div class="placeholder-icon">🤖</div>
@@ -169,15 +200,19 @@
   <!-- Activity Stats Card -->
   <div class="activity-stats-card">
     <div class="card-header">
-      <div>
-        <h3>🖱️ Activité en temps réel</h3>
-        <p>Suivi de votre activité aujourd'hui</p>
+      <div class="header-title">
+        <div class="title-icon">🖱️</div>
+        <div>
+          <h3>Activité en temps réel</h3>
+          <p>Suivi de votre activité aujourd'hui</p>
+        </div>
       </div>
       <div class="activity-indicator" [class.active]="isUserActive" [class.inactive]="!isUserActive">
         <span class="indicator-dot"></span>
         <span class="indicator-text">{{ isUserActive ? 'Actif' : 'Inactif' }}</span>
       </div>
     </div>
+    
     <div class="activity-stats">
       <div class="activity-stat">
         <div class="activity-icon">🖱️</div>
@@ -208,6 +243,7 @@
         </div>
       </div>
     </div>
+    
     <div class="activity-progress">
       <div class="progress-bar">
         <div class="progress-fill" [style.width.%]="todayActivityLevel || 0"></div>
@@ -219,11 +255,14 @@
         <span>Très actif</span>
       </div>
     </div>
+    
     <div class="inactivity-warning" *ngIf="inactiveDisplayMinutes >= 10 && inactiveDisplayMinutes < 15">
-      ⚠️ Attention: {{ inactiveDisplayMinutes }} minutes d'inactivité
+      <span class="warning-icon">⚠️</span>
+      <span>{{ inactiveDisplayMinutes }} minutes d'inactivité</span>
     </div>
     <div class="inactivity-alert" *ngIf="inactiveDisplayMinutes >= 15">
-      🔴 Détection d'inactivité prolongée: {{ inactiveDisplayMinutes }} minutes
+      <span class="alert-icon">🔴</span>
+      <span>Détection d'inactivité prolongée: {{ inactiveDisplayMinutes }} minutes</span>
     </div>
   </div>
 
@@ -253,9 +292,12 @@
   <!-- My Tasks Section -->
   <div class="tasks-card">
     <div class="card-header">
-      <div>
-        <h3>📋 Mes tâches</h3>
-        <p>Suivi de vos tâches quotidiennes</p>
+      <div class="header-title">
+        <div class="title-icon">📋</div>
+        <div>
+          <h3>Mes tâches</h3>
+          <p>Suivi de vos tâches quotidiennes</p>
+        </div>
       </div>
       <div class="card-actions">
         <select [(ngModel)]="taskFilter" (change)="filterTasks()" class="filter-select">
@@ -291,7 +333,7 @@
       </div>
       
       <div class="empty-state" *ngIf="filteredTasks.length === 0">
-        <span class="empty-icon">📭</span>
+        <div class="empty-icon">📭</div>
         <p>Aucune tâche trouvée</p>
       </div>
     </div>
@@ -300,23 +342,26 @@
   <!-- Leave Request Section -->
   <div class="leave-card">
     <div class="card-header">
-      <div>
-        <h3>🏖️ Demandes de congé</h3>
-        <p>Gérer vos demandes d'absence</p>
+      <div class="header-title">
+        <div class="title-icon">🏖️</div>
+        <div>
+          <h3>Demandes de congé</h3>
+          <p>Gérer vos demandes d'absence</p>
+        </div>
       </div>
       <button class="new-request-btn" (click)="openLeaveModal()">
-        + Nouvelle demande
+        <span>+</span> Nouvelle demande
       </button>
     </div>
     
     <div class="leave-stats">
       <div class="leave-stat">
-        <span class="stat-label">Congés disponibles</span>
-        <span class="stat-value">{{ leaveBalance }} jours</span>
+        <div class="stat-label">Congés disponibles</div>
+        <div class="stat-value">{{ leaveBalance }} jours</div>
       </div>
       <div class="leave-stat">
-        <span class="stat-label">Demandes en attente</span>
-        <span class="stat-value">{{ pendingRequests }}</span>
+        <div class="stat-label">Demandes en attente</div>
+        <div class="stat-value">{{ pendingRequests }}</div>
       </div>
     </div>
     
@@ -344,7 +389,7 @@
       </div>
       
       <div class="empty-state" *ngIf="leaveRequests.length === 0">
-        <span class="empty-icon">📅</span>
+        <div class="empty-icon">📅</div>
         <p>Aucune demande de congé</p>
       </div>
     </div>
@@ -353,10 +398,10 @@
   <!-- Floating Action Buttons -->
   <div class="fab-buttons">
     <button class="fab-btn" (click)="refreshData()" [class.loading]="isLoading" title="Rafraîchir">
-      🔄
+      <span class="fab-icon">🔄</span>
     </button>
     <button class="fab-btn ai-fab" (click)="calculateAIScore()" [class.loading]="isCalculatingScore" title="Calculer score IA">
-      🤖
+      <span class="fab-icon">🤖</span>
     </button>
   </div>
 
