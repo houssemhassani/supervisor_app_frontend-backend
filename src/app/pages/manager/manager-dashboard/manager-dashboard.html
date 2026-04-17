@@ -19,15 +19,15 @@
         Nouvelle demande
       </button>
 
-      <button mat-stroked-button (click)="refreshData()" [disabled]="isRefreshing">
-        <mat-icon [class.spin]="isRefreshing">refresh</mat-icon>
-        {{ isRefreshing ? 'Chargement...' : 'Actualiser' }}
+      <button mat-stroked-button (click)="refreshData()" [disabled]="uiState.isRefreshing">
+        <mat-icon [class.spin]="uiState.isRefreshing">refresh</mat-icon>
+        {{ uiState.isRefreshing ? 'Chargement...' : 'Actualiser' }}
       </button>
     </div>
   </div>
 
   <!-- STATS -->
-  <div class="stats-grid" *ngIf="stats && !isLoading">
+  <div class="stats-grid" *ngIf="stats && !uiState.isLoading">
 
     <div class="stat-card">
       <mat-icon>event_note</mat-icon>
@@ -80,7 +80,7 @@
   </div>
 
   <!-- CHART + TYPES -->
-  <div class="charts-section" *ngIf="stats && !isLoading">
+  <div class="charts-section" *ngIf="stats && !uiState.isLoading">
 
     <!-- CHART -->
     <div class="chart-card">
@@ -160,7 +160,7 @@
     <div class="tabs-header">
 
       <button
-        [class.active]="leaveSubTab === 'myRequests'"
+        [class.active]="uiState.leaveSubTab === 'myRequests'"
         (click)="switchLeaveSubTab('myRequests')">
 
         <mat-icon>person</mat-icon>
@@ -169,7 +169,7 @@
       </button>
 
       <button
-        [class.active]="leaveSubTab === 'allRequests'"
+        [class.active]="uiState.leaveSubTab === 'allRequests'"
         (click)="switchLeaveSubTab('allRequests')">
 
         <mat-icon>people</mat-icon>
@@ -186,7 +186,7 @@
     <div class="tabs-content">
 
       <!-- MY REQUESTS -->
-      <div *ngIf="leaveSubTab === 'myRequests'">
+      <div *ngIf="uiState.leaveSubTab === 'myRequests'">
 
         <app-leave-request-list
           title="Mes demandes"
@@ -205,7 +205,7 @@
       </div>
 
       <!-- ALL REQUESTS -->
-      <div *ngIf="leaveSubTab === 'allRequests'">
+      <div *ngIf="uiState.leaveSubTab === 'allRequests'">
 
         <app-leave-request-list
           title="Toutes les demandes"
@@ -226,9 +226,9 @@
   </div>
 
   <!-- LOADING -->
-  <div class="loading" *ngIf="isLoading">
-    <mat-spinner></mat-spinner>
-    <p>Chargement...</p>
+  <div class="loading" *ngIf="uiState.isLoading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Chargement des données...</p>
   </div>
 
 </div>
