@@ -9,12 +9,12 @@
       </div>
       <div>
         <h1>Dashboard Manager</h1>
-        <p>Suivi des congés et demandes</p>
+        <p>Gestion complète des équipes : congés, présences, tâches et projets</p>
       </div>
     </div>
 
     <div class="header-actions">
-      <button mat-raised-button color="primary" (click)="openCreateLeaveDialog()">
+      <button mat-raised-button color="primary" (click)="openCreateLeaveDialog()" *ngIf="uiState.activeTab === 'leave'">
         <mat-icon>add</mat-icon>
         Nouvelle demande
       </button>
@@ -26,9 +26,8 @@
     </div>
   </div>
 
-  <!-- STATS -->
-  <div class="stats-grid" *ngIf="stats && !uiState.isLoading">
-
+  <!-- STATS (visible uniquement sur l'onglet Congés) -->
+  <div class="stats-grid" *ngIf="stats && !uiState.isLoading && uiState.activeTab === 'leave'">
     <div class="stat-card">
       <mat-icon>event_note</mat-icon>
       <div>
@@ -76,17 +75,18 @@
         <p>Temps réponse</p>
       </div>
     </div>
-
   </div>
 
-  <!-- CHART + TYPES -->
-  <div class="charts-section" *ngIf="stats && !uiState.isLoading">
-
-    <!-- CHART -->
+  <!-- CHART + TYPES (visible uniquement sur l'onglet Congés) -->
+  <div class="charts-section" *ngIf="stats && !uiState.isLoading && uiState.activeTab === 'leave'">
+    <!-- CHART PLACEHOLDER -->
     <div class="chart-card">
       <div class="card-header">
         <mat-icon>pie_chart</mat-icon>
         <h3>Répartition des demandes</h3>
+      </div>
+      <div class="chart-placeholder">
+        <canvas id="leaveChart"></canvas>
       </div>
     </div>
 
@@ -98,13 +98,10 @@
       </div>
 
       <div class="types-list">
-
         <div class="type-item">
           <span>🏖️ Annuel</span>
           <div class="bar">
-            <div class="fill"
-              [style.width.%]="(stats.byType.ANNUAL / stats.total) * 100">
-            </div>
+            <div class="fill" [style.width.%]="stats.total > 0 ? (stats.byType.ANNUAL / stats.total) * 100 : 0"></div>
           </div>
           <span>{{ stats.byType.ANNUAL }}</span>
         </div>
@@ -112,9 +109,7 @@
         <div class="type-item">
           <span>🤒 Maladie</span>
           <div class="bar">
-            <div class="fill sick"
-              [style.width.%]="(stats.byType.SICK / stats.total) * 100">
-            </div>
+            <div class="fill sick" [style.width.%]="stats.total > 0 ? (stats.byType.SICK / stats.total) * 100 : 0"></div>
           </div>
           <span>{{ stats.byType.SICK }}</span>
         </div>
@@ -122,9 +117,7 @@
         <div class="type-item">
           <span>👤 Personnel</span>
           <div class="bar">
-            <div class="fill personal"
-              [style.width.%]="(stats.byType.PERSONAL / stats.total) * 100">
-            </div>
+            <div class="fill personal" [style.width.%]="stats.total > 0 ? (stats.byType.PERSONAL / stats.total) * 100 : 0"></div>
           </div>
           <span>{{ stats.byType.PERSONAL }}</span>
         </div>
@@ -132,9 +125,7 @@
         <div class="type-item">
           <span>💰 Sans solde</span>
           <div class="bar">
-            <div class="fill unpaid"
-              [style.width.%]="(stats.byType.UNPAID / stats.total) * 100">
-            </div>
+            <div class="fill unpaid" [style.width.%]="stats.total > 0 ? (stats.byType.UNPAID / stats.total) * 100 : 0"></div>
           </div>
           <span>{{ stats.byType.UNPAID }}</span>
         </div>
@@ -142,93 +133,148 @@
         <div class="type-item">
           <span>👶 Maternité</span>
           <div class="bar">
-            <div class="fill maternity"
-              [style.width.%]="(stats.byType.MATERNITY / stats.total) * 100">
-            </div>
+            <div class="fill maternity" [style.width.%]="stats.total > 0 ? (stats.byType.MATERNITY / stats.total) * 100 : 0"></div>
           </div>
           <span>{{ stats.byType.MATERNITY }}</span>
         </div>
 
+        <div class="type-item">
+          <span>📝 Autre</span>
+          <div class="bar">
+            <div class="fill other" [style.width.%]="stats.total > 0 ? (stats.byType.OTHER / stats.total) * 100 : 0"></div>
+          </div>
+          <span>{{ stats.byType.OTHER }}</span>
+        </div>
       </div>
-    </div>
-
-  </div>
-
-  <!-- TABS -->
-  <div class="tabs">
-
-    <div class="tabs-header">
-
-      <button
-        [class.active]="uiState.leaveSubTab === 'myRequests'"
-        (click)="switchLeaveSubTab('myRequests')">
-
-        <mat-icon>person</mat-icon>
-        Mes demandes
-
-      </button>
-
-      <button
-        [class.active]="uiState.leaveSubTab === 'allRequests'"
-        (click)="switchLeaveSubTab('allRequests')">
-
-        <mat-icon>people</mat-icon>
-        Toutes
-
-        <span *ngIf="getTotalPendingLeaveRequests()" class="badge warning">
-          {{ getTotalPendingLeaveRequests() }}
-        </span>
-      </button>
-
-    </div>
-
-    <!-- CONTENT -->
-    <div class="tabs-content">
-
-      <!-- MY REQUESTS -->
-      <div *ngIf="uiState.leaveSubTab === 'myRequests'">
-
-        <app-leave-request-list
-          title="Mes demandes"
-          [requests]="myLeaveRequests"
-          [showActions]="true"
-          [showManagerActions]="false"
-          [showUserInfo]="false"
-          [showFilters]="true"
-          [showStats]="true"
-          (onEdit)="openEditLeaveDialog($event)"
-          (onDelete)="deleteLeaveRequest($event)"
-          (onViewDetails)="viewLeaveDetails($event)"
-          (onCancel)="cancelLeaveRequest($event)">
-        </app-leave-request-list>
-
-      </div>
-
-      <!-- ALL REQUESTS -->
-      <div *ngIf="uiState.leaveSubTab === 'allRequests'">
-
-        <app-leave-request-list
-          title="Toutes les demandes"
-          [requests]="allLeaveRequests"
-          [showActions]="true"
-          [showManagerActions]="true"
-          [showUserInfo]="true"
-          [showFilters]="true"
-          [showStats]="true"
-          (onViewDetails)="viewLeaveDetails($event)"
-          (onApprove)="approveLeaveRequest($event)"
-          (onReject)="rejectLeaveRequest($event)">
-        </app-leave-request-list>
-
-      </div>
-
     </div>
   </div>
 
-  <!-- LOADING -->
-  <div class="loading" *ngIf="uiState.isLoading">
-    <mat-spinner diameter="40"></mat-spinner>
-    <p>Chargement des données...</p>
+  <!-- MAIN TABS NAVIGATION -->
+  <div class="main-tabs">
+    <div class="main-tabs-header">
+      <button 
+        [class.active]="uiState.activeTab === 'leave'"
+        (click)="setActiveTab('leave')">
+        <mat-icon>event_note</mat-icon>
+        Congés
+        <span class="badge" *ngIf="getTotalPendingLeaveRequests() > 0">{{ getTotalPendingLeaveRequests() }}</span>
+      </button>
+
+      <button 
+        [class.active]="uiState.activeTab === 'attendance'"
+        (click)="setActiveTab('attendance')">
+        <mat-icon>event_available</mat-icon>
+        Présences
+      </button>
+
+      <button 
+        [class.active]="uiState.activeTab === 'tasks'"
+        (click)="setActiveTab('tasks')">
+        <mat-icon>task</mat-icon>
+        Tâches
+      </button>
+
+      <button 
+        [class.active]="uiState.activeTab === 'projects'"
+        (click)="setActiveTab('projects')">
+        <mat-icon>folder</mat-icon>
+        Projets
+      </button>
+    </div>
+
+    <div class="main-tabs-content">
+      
+      <!-- ONGLET CONGÉS -->
+      <div *ngIf="uiState.activeTab === 'leave'" class="tab-content">
+        <div class="sub-tabs">
+          <div class="sub-tabs-header">
+            <button 
+              [class.active]="uiState.leaveSubTab === 'myRequests'"
+              (click)="switchLeaveSubTab('myRequests')">
+              <mat-icon>person</mat-icon>
+              Mes demandes
+            </button>
+
+            <button 
+              [class.active]="uiState.leaveSubTab === 'allRequests'"
+              (click)="switchLeaveSubTab('allRequests')">
+              <mat-icon>people</mat-icon>
+              Toutes les demandes
+              <span *ngIf="getTotalPendingLeaveRequests() > 0" class="badge warning">
+                {{ getTotalPendingLeaveRequests() }}
+              </span>
+            </button>
+          </div>
+
+          <div class="sub-tabs-content">
+            <!-- Mes demandes -->
+            <div *ngIf="uiState.leaveSubTab === 'myRequests'">
+              <app-leave-request-list
+                title="Mes demandes de congé"
+                [requests]="myLeaveRequests"
+                [showActions]="true"
+                [showManagerActions]="false"
+                [showUserInfo]="false"
+                [showFilters]="true"
+                [showStats]="true"
+                (onEdit)="openEditLeaveDialog($event)"
+                (onDelete)="deleteLeaveRequest($event)"
+                (onViewDetails)="viewLeaveDetails($event)"
+                (onCancel)="cancelLeaveRequest($event)">
+              </app-leave-request-list>
+            </div>
+
+            <!-- Toutes les demandes -->
+            <div *ngIf="uiState.leaveSubTab === 'allRequests'">
+              <app-leave-request-list
+                title="Toutes les demandes de congé"
+                [requests]="allLeaveRequests"
+                [showActions]="true"
+                [showManagerActions]="true"
+                [showUserInfo]="true"
+                [showFilters]="true"
+                [showStats]="true"
+                (onViewDetails)="viewLeaveDetails($event)"
+                (onApprove)="approveLeaveRequest($event)"
+                (onReject)="rejectLeaveRequest($event)">
+              </app-leave-request-list>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ONGLET PRÉSENCES -->
+      <div *ngIf="uiState.activeTab === 'attendance'" class="tab-content">
+        <app-attendance-management></app-attendance-management>
+      </div>
+
+      <!-- ONGLET TÂCHES -->
+      <div *ngIf="uiState.activeTab === 'tasks'" class="tab-content">
+        <div class="coming-soon">
+          <mat-icon>construction</mat-icon>
+          <h3>Module Tâches en cours de développement</h3>
+          <p>La gestion des tâches sera disponible prochainement</p>
+        </div>
+      </div>
+
+      <!-- ONGLET PROJETS -->
+      <div *ngIf="uiState.activeTab === 'projects'" class="tab-content">
+        <div class="coming-soon">
+          <mat-icon>construction</mat-icon>
+          <h3>Module Projets en cours de développement</h3>
+          <p>La gestion des projets sera disponible prochainement</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LOADING OVERLAY -->
+  <div class="loading-overlay" *ngIf="uiState.isLoading">
+    <div class="loading-content">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Chargement des données...</p>
+    </div>
   </div>
 
 </div>

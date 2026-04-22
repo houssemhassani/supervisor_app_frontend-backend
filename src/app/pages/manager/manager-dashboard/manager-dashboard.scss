@@ -66,6 +66,27 @@ $transition: all 0.2s ease;
     gap: 1rem;
 
     .header-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+
+      .icon {
+        width: 3rem;
+        height: 3rem;
+        background: $primary-light;
+        border-radius: $radius-lg;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        mat-icon {
+          font-size: 1.5rem;
+          width: 1.5rem;
+          height: 1.5rem;
+          color: $primary;
+        }
+      }
+
       h1 {
         margin: 0 0 0.25rem 0;
         font-size: 1.875rem;
@@ -123,7 +144,7 @@ $transition: all 0.2s ease;
   }
 
   // ============================================
-  // STATS CARDS - STYLE MINIMALISTE
+  // STATS CARDS
   // ============================================
   .stats-grid {
     display: grid;
@@ -137,7 +158,9 @@ $transition: all 0.2s ease;
       border-radius: $radius-md;
       padding: 1.25rem;
       transition: $transition;
-      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
 
       &:hover {
         border-color: $gray-300;
@@ -145,78 +168,40 @@ $transition: all 0.2s ease;
         transform: translateY(-2px);
       }
 
-      .stat-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 0.75rem;
-
-        .stat-icon {
-          width: 2rem;
-          height: 2rem;
-          border-radius: $radius;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-
-          mat-icon {
-            font-size: 1.125rem;
-            width: 1.125rem;
-            height: 1.125rem;
-          }
-        }
-
-        .stat-trend {
-          font-size: 0.75rem;
-          font-weight: 500;
-          padding: 0.125rem 0.375rem;
-          border-radius: $radius-sm;
-          background: $success-light;
-          color: $success;
-        }
-      }
-
-      .stat-value {
-        font-size: 1.875rem;
-        font-weight: 700;
-        color: $text-primary;
-        margin-bottom: 0.25rem;
-      }
-
-      .stat-label {
-        font-size: 0.75rem;
-        font-weight: 500;
+      mat-icon {
+        font-size: 2rem;
+        width: 2rem;
+        height: 2rem;
         color: $text-tertiary;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
       }
 
-      // Couleurs des icônes par type
-      &.total .stat-icon {
-        background: $primary-light;
-        color: $primary;
+      div {
+        flex: 1;
+
+        h2 {
+          margin: 0;
+          font-size: 1.875rem;
+          font-weight: 700;
+          color: $text-primary;
+        }
+
+        p {
+          margin: 0;
+          font-size: 0.75rem;
+          color: $text-tertiary;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
       }
-      &.pending .stat-icon {
-        background: $warning-light;
-        color: $warning;
-      }
-      &.approved .stat-icon {
-        background: $success-light;
-        color: $success;
-      }
-      &.rejected .stat-icon {
-        background: $danger-light;
-        color: $danger;
-      }
-      &.days .stat-icon {
-        background: $info-light;
-        color: $info;
-      }
+
+      &.pending mat-icon { color: $warning; }
+      &.approved mat-icon { color: $success; }
+      &.rejected mat-icon { color: $danger; }
     }
   }
 
   // ============================================
-  // CHARTS SECTION - DISC RÉTÉ
+  // CHARTS SECTION
   // ============================================
   .charts-section {
     display: grid;
@@ -232,11 +217,18 @@ $transition: all 0.2s ease;
 
       .card-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        gap: 0.5rem;
         margin-bottom: 1rem;
         padding-bottom: 0.75rem;
         border-bottom: 1px solid $border-light;
+
+        mat-icon {
+          font-size: 1.125rem;
+          width: 1.125rem;
+          height: 1.125rem;
+          color: $text-tertiary;
+        }
 
         h3 {
           margin: 0;
@@ -247,73 +239,221 @@ $transition: all 0.2s ease;
           letter-spacing: 0.03em;
         }
       }
+
+      .chart-placeholder {
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
     }
 
-    // Types list simplifiée
     .types-card {
       background: $bg-card;
       border: 1px solid $border-light;
       border-radius: $radius-md;
       padding: 1.25rem;
 
-      .card-header h3 {
-        margin: 0 0 1rem 0;
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: $text-secondary;
-      }
-
-      .type-item {
+      .card-header {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.625rem 0;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
         border-bottom: 1px solid $border-light;
 
-        &:last-child {
-          border-bottom: none;
+        mat-icon {
+          font-size: 1.125rem;
+          width: 1.125rem;
+          height: 1.125rem;
+          color: $text-tertiary;
         }
 
-        .type-name {
-          width: 90px;
-          font-size: 0.875rem;
-          font-weight: 500;
-          color: $text-secondary;
-        }
-
-        .type-bar {
-          flex: 1;
-          height: 6px;
-          background: $gray-100;
-          border-radius: 3px;
-          overflow: hidden;
-
-          .type-fill {
-            height: 100%;
-            border-radius: 3px;
-            transition: width 0.3s;
-
-            &.primary { background: $primary; }
-            &.warning { background: $warning; }
-            &.success { background: $success; }
-            &.gray { background: $gray-400; }
-            &.info { background: $info; }
-          }
-        }
-
-        .type-count {
-          width: 45px;
-          text-align: right;
+        h3 {
+          margin: 0;
           font-size: 0.875rem;
           font-weight: 600;
-          color: $text-primary;
+          color: $text-secondary;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+      }
+
+      .types-list {
+        .type-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.625rem 0;
+          border-bottom: 1px solid $border-light;
+
+          &:last-child {
+            border-bottom: none;
+          }
+
+          span:first-child {
+            width: 90px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: $text-secondary;
+          }
+
+          .bar {
+            flex: 1;
+            height: 6px;
+            background: $gray-100;
+            border-radius: 3px;
+            overflow: hidden;
+
+            .fill {
+              height: 100%;
+              border-radius: 3px;
+              transition: width 0.3s;
+              background: $primary;
+
+              &.sick { background: $warning; }
+              &.personal { background: $success; }
+              &.unpaid { background: $gray-400; }
+              &.maternity { background: $info; }
+              &.other { background: $gray-500; }
+            }
+          }
+
+          span:last-child {
+            width: 45px;
+            text-align: right;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: $text-primary;
+          }
         }
       }
     }
   }
 
   // ============================================
-  // LEAVE REQUESTS SECTION - DESIGN CLAIR
+  // MAIN TABS NAVIGATION
+  // ============================================
+  .main-tabs {
+    background: $bg-card;
+    border: 1px solid $border-light;
+    border-radius: $radius-md;
+    overflow: hidden;
+    margin-top: 1.5rem;
+
+    .main-tabs-header {
+      display: flex;
+      gap: 0.5rem;
+      padding: 1rem 1.5rem 0 1.5rem;
+      background: $bg-card;
+      border-bottom: 1px solid $border-light;
+
+      button {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: $text-secondary;
+        background: transparent;
+        border: none;
+        border-radius: $radius $radius 0 0;
+        cursor: pointer;
+        transition: $transition;
+
+        mat-icon {
+          font-size: 1.125rem;
+          width: 1.125rem;
+          height: 1.125rem;
+        }
+
+        .badge {
+          background: $danger;
+          color: white;
+          font-size: 0.688rem;
+          padding: 0.125rem 0.375rem;
+          border-radius: $radius-sm;
+          margin-left: 0.25rem;
+        }
+
+        &:hover {
+          background: $gray-50;
+          color: $text-primary;
+        }
+
+        &.active {
+          color: $primary;
+          border-bottom: 2px solid $primary;
+          background: transparent;
+        }
+      }
+    }
+
+    .main-tabs-content {
+      padding: 1.5rem;
+
+      .tab-content {
+        animation: fadeIn 0.3s ease;
+      }
+    }
+  }
+
+  // ============================================
+  // SUB TABS (pour les congés)
+  // ============================================
+  .sub-tabs {
+    .sub-tabs-header {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid $border-light;
+
+      button {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1.25rem;
+        font-size: 0.813rem;
+        font-weight: 500;
+        color: $text-secondary;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: $transition;
+
+        mat-icon {
+          font-size: 1rem;
+          width: 1rem;
+          height: 1rem;
+        }
+
+        .badge {
+          background: $warning;
+          color: white;
+          font-size: 0.688rem;
+          padding: 0.125rem 0.375rem;
+          border-radius: $radius-sm;
+        }
+
+        &:hover {
+          color: $text-primary;
+        }
+
+        &.active {
+          color: $primary;
+          border-bottom: 2px solid $primary;
+        }
+      }
+    }
+
+    .sub-tabs-content {
+      min-height: 400px;
+    }
+  }
+
+  // ============================================
+  // LEAVE REQUESTS SECTION
   // ============================================
   .leave-requests-section {
     background: $bg-card;
@@ -321,7 +461,6 @@ $transition: all 0.2s ease;
     border-radius: $radius-md;
     overflow: hidden;
 
-    // En-tête de section
     .section-header {
       display: flex;
       justify-content: space-between;
@@ -425,7 +564,6 @@ $transition: all 0.2s ease;
       }
     }
 
-    // Tableau des demandes
     .requests-table-wrapper {
       overflow-x: auto;
     }
@@ -460,7 +598,6 @@ $transition: all 0.2s ease;
         }
       }
 
-      // Cellule employé
       .employee-cell {
         display: flex;
         align-items: center;
@@ -491,7 +628,6 @@ $transition: all 0.2s ease;
         }
       }
 
-      // Badge type de congé
       .type-badge {
         display: inline-flex;
         align-items: center;
@@ -514,7 +650,6 @@ $transition: all 0.2s ease;
         &.maternity { background: $info-light; color: $info; }
       }
 
-      // Durée
       .duration {
         .days {
           font-weight: 600;
@@ -528,7 +663,6 @@ $transition: all 0.2s ease;
         }
       }
 
-      // Statut
       .status-badge {
         display: inline-flex;
         align-items: center;
@@ -549,13 +683,11 @@ $transition: all 0.2s ease;
         &.rejected { background: $danger-light; color: $danger; }
       }
 
-      // Date
       .date-cell {
         font-size: 0.875rem;
         color: $text-secondary;
       }
 
-      // Actions
       .actions-cell {
         .action-buttons {
           display: flex;
@@ -599,7 +731,6 @@ $transition: all 0.2s ease;
       }
     }
 
-    // Pagination
     .pagination {
       display: flex;
       justify-content: space-between;
@@ -644,7 +775,6 @@ $transition: all 0.2s ease;
       }
     }
 
-    // État vide
     .empty-state {
       padding: 3rem;
       text-align: center;
@@ -665,10 +795,48 @@ $transition: all 0.2s ease;
     }
   }
 
-  // Loading
-  .loading {
+  // ============================================
+  // COMING SOON PLACEHOLDER
+  // ============================================
+  .coming-soon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    text-align: center;
+
+    mat-icon {
+      font-size: 4rem;
+      width: 4rem;
+      height: 4rem;
+      color: $text-tertiary;
+      margin-bottom: 1rem;
+    }
+
+    h3 {
+      margin: 0 0 0.5rem;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: $text-primary;
+    }
+
+    p {
+      margin: 0;
+      color: $text-tertiary;
+      font-size: 0.875rem;
+    }
+  }
+
+  // ============================================
+  // LOADING OVERLAY
+  // ============================================
+  .loading-overlay {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
     display: flex;
@@ -689,6 +857,29 @@ $transition: all 0.2s ease;
       }
     }
   }
+}
+
+// ============================================
+// ANIMATIONS
+// ============================================
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.spin {
+  animation: spin 0.6s linear infinite;
 }
 
 // ============================================
@@ -715,6 +906,38 @@ $transition: all 0.2s ease;
 
     .stats-grid {
       grid-template-columns: repeat(2, 1fr);
+    }
+
+    .main-tabs {
+      .main-tabs-header {
+        padding: 0.75rem 1rem 0 1rem;
+        flex-wrap: wrap;
+
+        button {
+          padding: 0.5rem 1rem;
+          font-size: 0.75rem;
+
+          mat-icon {
+            font-size: 1rem;
+            width: 1rem;
+            height: 1rem;
+          }
+        }
+      }
+
+      .main-tabs-content {
+        padding: 1rem;
+      }
+    }
+
+    .sub-tabs {
+      .sub-tabs-header {
+        flex-wrap: wrap;
+
+        button {
+          padding: 0.5rem 1rem;
+        }
+      }
     }
 
     .leave-requests-section {
@@ -751,6 +974,20 @@ $transition: all 0.2s ease;
         gap: 0.75rem;
       }
     }
+
+    .coming-soon {
+      padding: 2rem 1rem;
+      
+      mat-icon {
+        font-size: 3rem;
+        width: 3rem;
+        height: 3rem;
+      }
+      
+      h3 {
+        font-size: 1rem;
+      }
+    }
   }
 }
 
@@ -768,28 +1005,83 @@ $transition: all 0.2s ease;
   .manager-dashboard {
     background: $bg-page-dark;
 
-    .dashboard-header .header-left {
-      h1 { color: $text-primary-dark; }
-      p { color: $text-tertiary-dark; }
+    .dashboard-header {
+      .header-left {
+        .icon {
+          background: rgba($primary, 0.2);
+        }
+
+        h1 { color: $text-primary-dark; }
+        p { color: $text-tertiary-dark; }
+      }
     }
 
     .stat-card,
     .chart-card,
     .types-card,
+    .main-tabs,
     .leave-requests-section {
       background: $bg-card-dark;
       border-color: $border-dark;
 
-      .stat-value { color: $text-primary-dark; }
-      .stat-label { color: $text-tertiary-dark; }
-      .card-header h3 { color: $text-tertiary-dark; }
-      .card-header { border-bottom-color: $border-dark; }
+      .stat-value, h2 { color: $text-primary-dark; }
+      .stat-label, p { color: $text-tertiary-dark; }
+      
+      .card-header {
+        border-bottom-color: $border-dark;
+        
+        h3 { color: $text-tertiary-dark; }
+        mat-icon { color: $text-tertiary-dark; }
+      }
     }
 
-    .type-item {
+    .main-tabs {
+      .main-tabs-header {
+        background: $bg-card-dark;
+        border-bottom-color: $border-dark;
+
+        button {
+          color: $text-tertiary-dark;
+
+          &:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: $text-primary-dark;
+          }
+
+          &.active {
+            color: $primary;
+          }
+        }
+      }
+    }
+
+    .sub-tabs {
+      .sub-tabs-header {
+        border-bottom-color: $border-dark;
+
+        button {
+          color: $text-tertiary-dark;
+
+          &:hover {
+            color: $text-primary-dark;
+          }
+
+          &.active {
+            color: $primary;
+          }
+        }
+      }
+    }
+
+    .types-list .type-item {
       border-bottom-color: $border-dark;
-      .type-name { color: $text-secondary-dark; }
-      .type-count { color: $text-primary-dark; }
+      
+      span:first-child { color: $text-secondary-dark; }
+      span:last-child { color: $text-primary-dark; }
+      
+      .bar {
+        background: $border-dark;
+      }
     }
 
     .leave-requests-section {
@@ -833,21 +1125,30 @@ $transition: all 0.2s ease;
         .pagination-info { color: $text-tertiary-dark; }
       }
     }
+
+    .coming-soon {
+      mat-icon { color: $text-tertiary-dark; }
+      h3 { color: $text-primary-dark; }
+      p { color: $text-tertiary-dark; }
+    }
+
+    .loading-overlay {
+      background: rgba(0, 0, 0, 0.7);
+      
+      .loading-content {
+        background: $bg-card-dark;
+        
+        p {
+          color: $text-secondary-dark;
+        }
+      }
+    }
   }
 }
 
 // ============================================
-// UTILITAIRES & ANIMATIONS
+// ACCESSIBILITY - REDUCED MOTION
 // ============================================
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.spin {
-  animation: spin 0.6s linear infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

@@ -84,6 +84,41 @@ export interface DashboardStats {
   averageResponseTime?: number;
 }
 
+export interface Attendance {
+  id: number;
+  users_permissions_user: {
+    id: number;
+    username: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+  };
+  date: string;
+  check_in: string | null;
+  check_out: string | null;
+  statuts: 'PRESENT' | 'ABSENT' | 'LATE' | 'HALF_DAY' | 'HOLIDAY';
+  check_in_late_minutes: number;
+  early_checkout_minutes: number;
+  work_hours: number;
+  location?: any;
+  ip_address?: string;
+  notes?: string;
+  publishedAt?: string;
+}
+
+export interface AttendanceStats {
+  totalDays: number;
+  presentDays: number;
+  absentDays: number;
+  lateDays: number;
+  halfDays: number;
+  holidayDays: number;
+  totalWorkHours: number;
+  averageDailyHours: number;
+  attendanceRate: number;
+  punctualityRate: number;
+}
+
 export interface ApiResponse<T = any> {
   data: T;
   meta?: {
@@ -102,6 +137,7 @@ export interface ApiResponse<T = any> {
 export class ManagerService {
   private apiUrl: string;
   private currentUser: User | null = null;
+  private useMockData = true; // Mode mocké par défaut pour le développement
 
   constructor(private http: HttpClient) {
     this.apiUrl = environment.apiUrl || 'http://localhost:1337/api';
@@ -127,7 +163,7 @@ export class ManagerService {
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     
     if (!token) {
-      console.warn('⚠️ Aucun token trouvé');
+      console.warn('⚠️ Aucun token trouvé dans le localStorage');
       return new HttpHeaders({ 'Content-Type': 'application/json' });
     }
     
@@ -138,12 +174,10 @@ export class ManagerService {
   }
 
   private getUserId(): number | null {
-    // Essayer depuis l'objet user stocké
     if (this.currentUser?.id) {
       return this.currentUser.id;
     }
     
-    // Essayer depuis le localStorage
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
@@ -152,7 +186,6 @@ export class ManagerService {
       } catch(e) {}
     }
     
-    // Essayer depuis le token JWT
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     if (token) {
       try {
@@ -183,11 +216,12 @@ export class ManagerService {
     let errorMessage = customMessage || 'Une erreur est survenue';
     
     if (error.error instanceof ErrorEvent) {
-      // Erreur côté client
       errorMessage = `Erreur: ${error.error.message}`;
     } else {
-      // Erreur côté serveur
       switch (error.status) {
+        case 0:
+          errorMessage = 'Impossible de se connecter au serveur. Vérifiez que le backend est démarré.';
+          break;
         case 400:
           errorMessage = error.error?.message || 'Requête invalide';
           break;
@@ -219,9 +253,6 @@ export class ManagerService {
   // LEAVE REQUESTS - CRUD COMPLET
   // ============================================
 
-  /**
-   * Récupérer toutes les demandes de congé (Manager/Admin uniquement)
-   */
   getAllLeaveRequests(filters?: {
     status?: string;
     type?: string;
@@ -248,9 +279,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Récupérer mes demandes de congé
-   */
   getMyLeaveRequests(filters?: {
     status?: string;
     type?: string;
@@ -276,9 +304,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Récupérer une demande spécifique par son ID
-   */
   getLeaveRequestById(id: number): Observable<ApiResponse<LeaveRequest>> {
     const url = `${this.apiUrl}/leave-requests/${id}?populate=user`;
     console.log(`📡 [Manager] GET demande #${id}`);
@@ -290,9 +315,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Créer une nouvelle demande de congé
-   */
   createLeaveRequest(data: {
     type: string;
     start_date: string;
@@ -315,7 +337,6 @@ export class ManagerService {
       'Content-Type': 'application/json'
     });
 
-    // Calculer la durée
     const start = new Date(data.start_date);
     const end = new Date(data.end_date);
     const durationDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
@@ -340,9 +361,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Mettre à jour une demande de congé
-   */
   updateLeaveRequest(id: number, data: {
     type?: string;
     start_date?: string;
@@ -385,9 +403,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Supprimer une demande de congé
-   */
   deleteLeaveRequest(id: number): Observable<any> {
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     
@@ -408,9 +423,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Approuver une demande de congé (Manager uniquement)
-   */
   approveLeaveRequest(id: number, comments?: string): Observable<ApiResponse<LeaveRequest>> {
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     
@@ -437,9 +449,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Rejeter une demande de congé (Manager uniquement)
-   */
   rejectLeaveRequest(id: number, comments?: string): Observable<ApiResponse<LeaveRequest>> {
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     
@@ -466,9 +475,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Annuler une demande de congé
-   */
   cancelLeaveRequest(id: number): Observable<ApiResponse<LeaveRequest>> {
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     
@@ -493,26 +499,16 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Vérifier si une demande peut être modifiée
-   */
   canEditLeaveRequest(request: LeaveRequest): boolean {
-    // Une demande peut être modifiée si elle est en attente
-    // ou si l'utilisateur est manager/admin
     const isPending = request.statuts === 'PENDING';
     const isManagerOrAdmin = this.isManager();
-    
     return isPending || isManagerOrAdmin;
   }
 
-  /**
-   * Récupérer les statistiques des congés
-   */
   getLeaveStats(): Observable<ApiResponse<DashboardStats>> {
     const url = `${this.apiUrl}/leave-requests/stats`;
     const headers = this.getHeaders();
     
-    // Données mockées par défaut
     const mockStats: ApiResponse<DashboardStats> = {
       data: {
         total: 0,
@@ -546,9 +542,6 @@ export class ManagerService {
   // TASKS - CRUD COMPLET
   // ============================================
 
-  /**
-   * Récupérer toutes les tâches
-   */
   getAllTasks(filters?: {
     status?: string;
     priority?: string;
@@ -571,9 +564,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Récupérer mes tâches
-   */
   getMyTasks(): Observable<ApiResponse<Task[]>> {
     const userId = this.getUserId();
     if (!userId) {
@@ -590,9 +580,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Récupérer une tâche spécifique
-   */
   getTaskById(id: number): Observable<ApiResponse<Task>> {
     const url = `${this.apiUrl}/tasks/${id}?populate=assigned_to&populate=project`;
     console.log(`📡 [Manager] GET tâche #${id}`);
@@ -604,9 +591,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Créer une nouvelle tâche
-   */
   createTask(data: {
     title: string;
     description: string;
@@ -646,9 +630,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Mettre à jour une tâche
-   */
   updateTask(id: number, data: {
     title?: string;
     description?: string;
@@ -679,16 +660,10 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Mettre à jour le statut d'une tâche
-   */
   updateTaskStatus(id: number, status: string): Observable<ApiResponse<Task>> {
     return this.updateTask(id, { statuts: status });
   }
 
-  /**
-   * Supprimer une tâche
-   */
   deleteTask(id: number): Observable<any> {
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     
@@ -713,9 +688,6 @@ export class ManagerService {
   // PROJECTS - CRUD COMPLET
   // ============================================
 
-  /**
-   * Récupérer tous les projets
-   */
   getAllProjects(): Observable<ApiResponse<Project[]>> {
     const url = `${this.apiUrl}/projects?sort=createdAt:desc&populate=users&populate=creator`;
     console.log('📡 [Manager] GET tous les projets');
@@ -727,9 +699,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Récupérer mes projets
-   */
   getMyProjects(): Observable<ApiResponse<Project[]>> {
     const userId = this.getUserId();
     if (!userId) {
@@ -746,9 +715,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Récupérer un projet spécifique
-   */
   getProjectById(id: number): Observable<ApiResponse<Project>> {
     const url = `${this.apiUrl}/projects/${id}?populate=users&populate=creator`;
     console.log(`📡 [Manager] GET projet #${id}`);
@@ -760,9 +726,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Créer un nouveau projet
-   */
   createProject(data: {
     name: string;
     description: string;
@@ -801,9 +764,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Mettre à jour un projet
-   */
   updateProject(id: number, data: {
     name?: string;
     description?: string;
@@ -833,9 +793,6 @@ export class ManagerService {
     );
   }
 
-  /**
-   * Supprimer un projet
-   */
   deleteProject(id: number): Observable<any> {
     const token = localStorage.getItem('token') || localStorage.getItem('jwt');
     
@@ -860,35 +817,87 @@ export class ManagerService {
   // USERS
   // ============================================
 
-  /**
-   * Récupérer tous les utilisateurs
-   */
-  getUsers(): Observable<ApiResponse<User[]>> {
-    const token = localStorage.getItem('token') || localStorage.getItem('jwt');
-    
-    if (!token) {
-      return throwError(() => new Error('Non authentifié'));
-    }
-    
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    });
-    
-    const url = `${this.apiUrl}/users?populate=role`;
-    console.log('📡 [Manager] GET utilisateurs');
-    
-    return this.http.get<ApiResponse<User[]>>(url, { headers }).pipe(
-      tap(response => console.log(`✅ ${response.data?.length || 0} utilisateurs trouvés`)),
-      catchError(error => this.handleError(error, 'Erreur lors du chargement des utilisateurs'))
-    );
-  }
+ // ============================================
+// USERS
+// ============================================
 
-  /**
-   * Récupérer les membres d'une équipe (pour les assignations)
-   */
+getUsers(): Observable<ApiResponse<User[]>> {
+  const headers = this.getHeaders();
+  
+  // ✅ ENDPOINT CORRECT: /api/users (pas /api/users-permissions/users)
+  const url = `${this.apiUrl}/users?populate=role`;
+  
+  console.log('📡 [Manager] GET utilisateurs', url);
+  
+  return this.http.get<any>(url, { headers }).pipe(
+    map(response => {
+      console.log('📦 Réponse brute de /api/users:', response);
+      
+      let usersData: any[] = [];
+      
+      // Strapi v4: /api/users retourne directement un tableau
+      if (Array.isArray(response)) {
+        usersData = response;
+        console.log('✅ Format: tableau direct');
+      } 
+      // Si la réponse a une propriété 'data' qui est un tableau
+      else if (response?.data && Array.isArray(response.data)) {
+        usersData = response.data;
+        console.log('✅ Format: wrapper { data: [] }');
+      }
+      // Si la réponse a une propriété 'results'
+      else if (response?.results && Array.isArray(response.results)) {
+        usersData = response.results;
+        console.log('✅ Format: { results: [] }');
+      }
+      else {
+        console.warn('⚠️ Format de réponse inconnu:', typeof response);
+        usersData = [];
+      }
+      
+      // Transformer les données
+      const formattedUsers: User[] = usersData.map((user: any) => ({
+        id: user.id,
+        username: user.username || user.email?.split('@')[0] || `user_${user.id}`,
+        email: user.email || '',
+        firstName: user.firstname || user.firstName || '',
+        lastName: user.lastname || user.lastName || '',
+        role: user.role ? {
+          id: user.role.id,
+          name: user.role.name || 'unknown',
+          type: user.role.type || 'unknown'
+        } : undefined
+      }));
+      
+      console.log(`✅ ${formattedUsers.length} utilisateur(s) trouvé(s)`);
+      formattedUsers.forEach(u => {
+        console.log(`   - ID:${u.id} | ${u.username} | Rôle: ${u.role?.name || 'AUCUN'}`);
+      });
+      
+      return {
+        data: formattedUsers,
+        meta: {}
+      } as ApiResponse<User[]>;
+    }),
+    catchError((error: HttpErrorResponse) => {
+      console.error('❌ Erreur getUsers:', error);
+      
+      // Afficher plus de détails sur l'erreur
+      if (error.status === 404) {
+        console.error('⚠️ Endpoint /api/users non trouvé. Vérifiez que l\'API Strapi est bien configurée.');
+      } else if (error.status === 401) {
+        console.error('⚠️ Non authentifié. Vérifiez que le token est valide.');
+      }
+      
+      return of({
+        data: [],
+        meta: {}
+      } as ApiResponse<User[]>);
+    })
+  );
+}
+
   getTeamMembers(): Observable<ApiResponse<User[]>> {
-    // Filtrer pour n'avoir que les membres (pas les managers)
     return this.getUsers().pipe(
       map(response => ({
         ...response,
@@ -901,13 +910,9 @@ export class ManagerService {
   // DASHBOARD STATS
   // ============================================
 
-  /**
-   * Récupérer les statistiques du dashboard
-   */
   getDashboardStats(): Observable<ApiResponse<DashboardStats>> {
     const headers = this.getHeaders();
     
-    // Données mockées
     const mockStats: ApiResponse<DashboardStats> = {
       data: {
         total: 0,
@@ -938,36 +943,232 @@ export class ManagerService {
   }
 
   // ============================================
+  // ATTENDANCE - GESTION DES PRÉSENCES
+  // ============================================
+
+getAttendances(userId?: number, startDate?: string, endDate?: string): Observable<ApiResponse<Attendance[]>> {
+  const headers = this.getHeaders();
+  
+  // URL simple sans filtres
+  let url = `${this.apiUrl}/attendances?sort=date:desc&populate=users_permissions_user`;
+  
+  console.log('📡 [Attendance] GET présences (sans filtres)', url);
+  
+  return this.http.get<ApiResponse<Attendance[]>>(url, { headers }).pipe(
+    map(response => {
+      let attendances = response.data || [];
+      
+      // Filtrer par utilisateur côté client
+      if (userId) {
+        attendances = attendances.filter(a => a.users_permissions_user?.id === userId);
+        console.log(`👤 Filtrage utilisateur ${userId}: ${response.data.length} -> ${attendances.length} présences`);
+      }
+      
+      // Filtrer par dates côté client
+      if (startDate && endDate && attendances.length > 0) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        
+        const beforeFilter = attendances.length;
+        attendances = attendances.filter(attendance => {
+          const attendanceDate = new Date(attendance.date);
+          return attendanceDate >= start && attendanceDate <= end;
+        });
+        
+        console.log(`📅 Filtrage dates: ${beforeFilter} -> ${attendances.length} présences`);
+      }
+      
+      return { ...response, data: attendances };
+    }),
+    tap(response => console.log(`✅ ${response.data?.length || 0} présences après filtrage`)),
+    catchError((error: HttpErrorResponse) => {
+      console.error('❌ [Attendance] Erreur:', error);
+      
+      return of({
+        data: [],
+        meta: { pagination: { total: 0, page: 1, pageSize: 100, pageCount: 0 } }
+      } as ApiResponse<Attendance[]>);
+    })
+  );
+}
+
+getTodayAttendances(): Observable<ApiResponse<Attendance[]>> {
+  // Au lieu d'utiliser getAttendances avec dates, faites un appel simple
+  const headers = this.getHeaders();
+  const url = `${this.apiUrl}/attendances?sort=date:desc&populate=users_permissions_user`;
+  
+  return this.http.get<ApiResponse<Attendance[]>>(url, { headers }).pipe(
+    map(response => {
+      const today = new Date().toISOString().split('T')[0];
+      const todayAttendances = response.data.filter(attendance => {
+        const attendanceDate = new Date(attendance.date).toISOString().split('T')[0];
+        return attendanceDate === today;
+      });
+      return { ...response, data: todayAttendances };
+    }),
+    catchError(error => {
+      console.error('❌ Erreur getTodayAttendances:', error);
+      return of({ data: [], meta: {} } as ApiResponse<Attendance[]>);
+    })
+  );
+}
+
+ getAttendanceStats(userId: number, month: string): Observable<ApiResponse<AttendanceStats>> {
+  const headers = this.getHeaders();
+  
+  const [year, monthNum] = month.split('-');
+  const startDate = `${year}-${monthNum}-01`;
+  const endDate = new Date(parseInt(year), parseInt(monthNum), 0).toISOString().split('T')[0];
+  
+  // 🔥 Utiliser l'endpoint existant getMonthlyStats du contrôleur
+  const url = `${this.apiUrl}/attendances/monthly-stats?userId=${userId}&month=${monthNum}&year=${year}`;
+  
+  console.log('📡 [Attendance] GET stats', url);
+  
+  // Si l'endpoint personnalisé n'existe pas, calculer les stats côté client
+  return this.getAttendances(userId, startDate, endDate).pipe(
+    map(response => {
+      const attendances = response.data;
+      
+      // Calculer les stats manuellement
+      const stats: AttendanceStats = {
+        totalDays: attendances.length,
+        presentDays: 0,
+        absentDays: 0,
+        lateDays: 0,
+        halfDays: 0,
+        holidayDays: 0,
+        totalWorkHours: 0,
+        averageDailyHours: 0,
+        attendanceRate: 0,
+        punctualityRate: 0
+      };
+      
+      for (const attendance of attendances) {
+        switch (attendance.statuts) {
+          case 'PRESENT':
+            stats.presentDays++;
+            break;
+          case 'ABSENT':
+            stats.absentDays++;
+            break;
+          case 'LATE':
+            stats.lateDays++;
+            stats.presentDays++;
+            break;
+          case 'HALF_DAY':
+            stats.halfDays++;
+            break;
+          case 'HOLIDAY':
+            stats.holidayDays++;
+            break;
+        }
+        
+        if (attendance.work_hours) {
+          stats.totalWorkHours += attendance.work_hours;
+        }
+      }
+      
+      stats.totalWorkHours = parseFloat(stats.totalWorkHours.toFixed(2));
+      stats.averageDailyHours = stats.totalDays > 0 ? parseFloat((stats.totalWorkHours / stats.totalDays).toFixed(2)) : 0;
+      stats.attendanceRate = stats.totalDays > 0 ? parseFloat(((stats.presentDays + stats.halfDays) / stats.totalDays * 100).toFixed(2)) : 0;
+      
+      let onTimeCount = 0;
+      for (const attendance of attendances) {
+        if (attendance.check_in_late_minutes === 0 && attendance.check_in) {
+          onTimeCount++;
+        }
+      }
+      stats.punctualityRate = stats.presentDays > 0 ? parseFloat((onTimeCount / stats.presentDays * 100).toFixed(2)) : 0;
+      
+      return { data: stats, meta: {} } as ApiResponse<AttendanceStats>;
+    }),
+    catchError(error => {
+      console.error('❌ Erreur getAttendanceStats:', error);
+      return of({
+        data: {
+          totalDays: 0,
+          presentDays: 0,
+          absentDays: 0,
+          lateDays: 0,
+          halfDays: 0,
+          holidayDays: 0,
+          totalWorkHours: 0,
+          averageDailyHours: 0,
+          attendanceRate: 0,
+          punctualityRate: 0
+        },
+        meta: {}
+      } as ApiResponse<AttendanceStats>);
+    })
+  );
+}
+
+  exportAttendanceToPDF(userId: number, month: string): Observable<Blob> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/export-pdf?userId=${userId}&month=${month}`;
+    
+    return this.http.get(url, { headers, responseType: 'blob' }).pipe(
+      tap(() => console.log(`📄 PDF exporté pour l'utilisateur ${userId} - ${month}`)),
+      catchError(error => this.handleError(error, 'Erreur lors de l\'export PDF'))
+    );
+  }
+
+  // ============================================
   // UTILITAIRES
   // ============================================
 
-  /**
-   * Récupérer l'utilisateur courant
-   */
   getCurrentUser(): User | null {
     return this.currentUser;
   }
 
-  /**
-   * Vérifier si l'utilisateur est manager
-   */
   isCurrentUserManager(): boolean {
     return this.isManager();
   }
 
-  /**
-   * Formater une date pour l'API
-   */
-  formatDateForApi(date: Date): string {
-    return date.toISOString().split('T')[0];
-  }
+  // Ajoutez cette méthode dans votre ManagerService
 
-  /**
-   * Calculer la durée en jours entre deux dates
-   */
+private formatDateForApi(date: string | Date): string {
+  if (!date) return '';
+  
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else {
+    dateObj = date;
+  }
+  
+  // Vérifier si la date est valide
+  if (isNaN(dateObj.getTime())) {
+    console.warn('⚠️ Date invalide:', date);
+    return '';
+  }
+  
+  // Formater en YYYY-MM-DD
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+}
+
   calculateDuration(startDate: string, endDate: string): number {
     const start = new Date(startDate);
     const end = new Date(endDate);
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
+  }
+
+  // ============================================
+  // MODE MOCKÉ
+  // ============================================
+
+  setMockMode(useMock: boolean): void {
+    this.useMockData = useMock;
+  }
+
+  isMockMode(): boolean {
+    return this.useMockData;
   }
 }

@@ -8,10 +8,11 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCardModule } from '@angular/material/card';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { ManagerService, LeaveRequest, Task, DashboardStats, ApiResponse } from '../../../services/manager';
+import { ManagerService, LeaveRequest, DashboardStats, ApiResponse } from '../../../services/manager';
 import { LeaveRequestFormComponent } from '../leave-request-form/leave-request-form';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog';
 import { LeaveRequestListComponent } from '../leave-request-list/leave-request-list';
+import { AttendanceManagementComponent } from '../attendancemanagement/attendancemanagement';
 
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -24,6 +25,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 interface DashboardUIState {
   isLoading: boolean;
   isRefreshing: boolean;
+  activeTab: 'leave' | 'attendance' | 'tasks' | 'projects';
   leaveSubTab: 'myRequests' | 'allRequests';
   useMockData: boolean;
   errorMessage: string | null;
@@ -159,7 +161,8 @@ const MOCK_LEAVE_REQUESTS: LeaveRequest[] = [
     MatProgressSpinnerModule,
     MatCardModule,
     MatTooltipModule,
-    LeaveRequestListComponent
+    LeaveRequestListComponent,
+    AttendanceManagementComponent
   ],
   templateUrl: './manager-dashboard.html',
   styleUrls: ['./manager-dashboard.scss']
@@ -170,19 +173,17 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
   // DONNÉES
   // ============================================
   
-  // Demandes de congé
   myLeaveRequests: LeaveRequest[] = [];
   allLeaveRequests: LeaveRequest[] = [];
-  
-  // Statistiques
   stats: DashboardStats | null = null;
   
   // État de l'interface
   uiState: DashboardUIState = {
     isLoading: true,
     isRefreshing: false,
+    activeTab: 'leave',
     leaveSubTab: 'myRequests',
-    useMockData: true, // 🔥 Mettre à false quand l'API sera prête
+    useMockData: true,
     errorMessage: null
   };
   
@@ -220,9 +221,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
   // CHARGEMENT DES DONNÉES
   // ============================================
   
-  /**
-   * Charge toutes les données du dashboard
-   */
   private loadAllData(): void {
     this.uiState.isLoading = true;
     this.uiState.errorMessage = null;
@@ -234,29 +232,18 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     }
   }
   
-  /**
-   * Charge les données mockées (développement)
-   */
   private loadMockData(): void {
-    // Simuler un délai réseau
     setTimeout(() => {
       try {
-        // Filtrer les demandes de l'utilisateur courant (id: 1)
         const currentUserId = 1;
         this.myLeaveRequests = MOCK_LEAVE_REQUESTS.filter(r => r.user?.id === currentUserId);
         this.allLeaveRequests = [...MOCK_LEAVE_REQUESTS];
-        
-        // Calculer les statistiques
         this.stats = this.calculateStatsFromRequests(this.allLeaveRequests);
         
         this.uiState.isLoading = false;
         this.cdr.detectChanges();
         
-        console.log('✅ Données mockées chargées:', {
-          total: this.allLeaveRequests.length,
-          myRequests: this.myLeaveRequests.length,
-          stats: this.stats
-        });
+        console.log('✅ Données mockées chargées');
       } catch (error) {
         console.error('❌ Erreur chargement mock data:', error);
         this.uiState.errorMessage = 'Erreur lors du chargement des données';
@@ -266,15 +253,23 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     }, 500);
   }
   
-  /**
-   * Charge les données réelles depuis l'API
-   */
   private loadRealData(): void {
+    // Vérifier si l'utilisateur est connecté
+    const token = localStorage.getItem('token') || localStorage.getItem('jwt');
+    if (!token) {
+      console.warn('⚠️ Aucun token trouvé, utilisation du mode mocké');
+      this.uiState.useMockData = true;
+      this.loadMockData();
+      return;
+    }
+    
     const allLeaveRequests$ = this.managerService.getAllLeaveRequests().pipe(
       catchError((error: HttpErrorResponse) => {
         console.error('Erreur chargement all leave requests:', error);
-        if (error.status === 403) {
-          this.showNotification('⚠️ Permissions insuffisantes pour voir toutes les demandes', 'warning');
+        if (error.status === 401) {
+          this.showNotification('⚠️ Session expirée, veuillez vous reconnecter', 'warning');
+          this.uiState.useMockData = true;
+          this.loadMockData();
         }
         return of({ data: [] } as ApiResponse<LeaveRequest[]>);
       })
@@ -305,7 +300,7 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
         
         const totalRequests = this.allLeaveRequests.length;
         if (totalRequests > 0) {
-          this.showNotification(`✅ ${totalRequests} demande${totalRequests > 1 ? 's' : ''} chargée${totalRequests > 1 ? 's' : ''}`, 'success');
+          this.showNotification(`✅ ${totalRequests} demande(s) chargée(s)`, 'success');
         } else {
           this.showNotification('✅ Données chargées (aucune demande)', 'info');
         }
@@ -327,9 +322,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
   // CALCUL DES STATISTIQUES
   // ============================================
   
-  /**
-   * Calcule les statistiques à partir des demandes
-   */
   private calculateStatsFromRequests(requests: LeaveRequest[]): DashboardStats {
     const total = requests.length;
     const pending = requests.filter(r => r.statuts === 'PENDING').length;
@@ -343,7 +335,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
       totalDaysApproved += request.duration_days;
     }
     
-    // Calculer le temps de réponse moyen
     let averageResponseTime = 0;
     const respondedRequests = requests.filter(r => r.approval_date || r.rejection_date);
     if (respondedRequests.length > 0) {
@@ -376,9 +367,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     };
   }
   
-  /**
-   * Retourne des statistiques vides
-   */
   private getEmptyStats(): DashboardStats {
     return {
       total: 0,
@@ -400,12 +388,21 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
   }
   
   // ============================================
+  // ACTIONS - ONGLETS
+  // ============================================
+  
+  setActiveTab(tab: 'leave' | 'attendance' | 'tasks' | 'projects'): void {
+    this.uiState.activeTab = tab;
+  }
+  
+  switchLeaveSubTab(tab: 'myRequests' | 'allRequests'): void {
+    this.uiState.leaveSubTab = tab;
+  }
+  
+  // ============================================
   // ACTIONS - DEMANDES DE CONGÉ
   // ============================================
   
-  /**
-   * Ouvre le dialogue de création d'une demande
-   */
   openCreateLeaveDialog(): void {
     const dialogRef = this.dialog.open(LeaveRequestFormComponent, {
       width: '600px',
@@ -428,9 +425,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.subscriptions.add(sub);
   }
   
-  /**
-   * Crée une demande en mode mocké
-   */
   private createMockLeaveRequest(data: any): void {
     const currentUser = MOCK_USERS[0];
     const newRequest: LeaveRequest = {
@@ -454,9 +448,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
   
-  /**
-   * Crée une demande via l'API
-   */
   private createRealLeaveRequest(data: any): void {
     this.uiState.isLoading = true;
     
@@ -475,20 +466,12 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Ouvre le dialogue de modification d'une demande
-   */
   openEditLeaveDialog(request: LeaveRequest): void {
-    // Vérifier si la demande peut être modifiée
     if (!this.canEditLeaveRequest(request)) {
-      this.showNotification(
-        '⚠️ Cette demande ne peut plus être modifiée car elle a déjà été traitée', 
-        'warning'
-      );
+      this.showNotification('⚠️ Cette demande ne peut plus être modifiée car elle a déjà été traitée', 'warning');
       return;
     }
     
-    // En mode réel, rafraîchir les données
     if (!this.uiState.useMockData) {
       this.uiState.isLoading = true;
       this.managerService.getLeaveRequestById(request.id).subscribe({
@@ -507,9 +490,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     }
   }
   
-  /**
-   * Ouvre le dialogue d'édition avec les données
-   */
   private openEditDialogWithData(request: LeaveRequest): void {
     const dialogRef = this.dialog.open(LeaveRequestFormComponent, {
       width: '600px',
@@ -533,9 +513,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.subscriptions.add(sub);
   }
   
-  /**
-   * Met à jour une demande en mode mocké
-   */
   private updateMockLeaveRequest(id: number, data: any): void {
     const index = this.allLeaveRequests.findIndex(r => r.id === id);
     if (index !== -1) {
@@ -550,22 +527,17 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
       };
       this.allLeaveRequests[index] = updatedRequest;
       
-      // Mettre à jour aussi dans myLeaveRequests si présent
       const myIndex = this.myLeaveRequests.findIndex(r => r.id === id);
       if (myIndex !== -1) {
         this.myLeaveRequests[myIndex] = updatedRequest;
       }
       
-      // Recalculer les stats
       this.stats = this.calculateStatsFromRequests(this.allLeaveRequests);
       this.showNotification('✅ Demande modifiée avec succès', 'success');
       this.cdr.detectChanges();
     }
   }
   
-  /**
-   * Met à jour une demande via l'API
-   */
   private updateRealLeaveRequest(id: number, data: any): void {
     this.uiState.isLoading = true;
     
@@ -584,9 +556,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Supprime une demande
-   */
   deleteLeaveRequest(request: LeaveRequest): void {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
@@ -610,9 +579,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.subscriptions.add(sub);
   }
   
-  /**
-   * Supprime une demande en mode mocké
-   */
   private deleteMockLeaveRequest(id: number): void {
     this.allLeaveRequests = this.allLeaveRequests.filter(r => r.id !== id);
     this.myLeaveRequests = this.myLeaveRequests.filter(r => r.id !== id);
@@ -622,9 +588,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
   
-  /**
-   * Supprime une demande via l'API
-   */
   private deleteRealLeaveRequest(id: number): void {
     this.uiState.isLoading = true;
     
@@ -643,9 +606,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Approuve une demande
-   */
   approveLeaveRequest(request: LeaveRequest): void {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
@@ -669,9 +629,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.subscriptions.add(sub);
   }
   
-  /**
-   * Approuve une demande en mode mocké
-   */
   private approveMockLeaveRequest(id: number): void {
     const index = this.allLeaveRequests.findIndex(r => r.id === id);
     if (index !== -1) {
@@ -687,9 +644,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     }
   }
   
-  /**
-   * Approuve une demande via l'API
-   */
   private approveRealLeaveRequest(id: number): void {
     this.uiState.isLoading = true;
     
@@ -708,9 +662,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Rejette une demande
-   */
   rejectLeaveRequest(request: LeaveRequest): void {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
@@ -734,9 +685,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.subscriptions.add(sub);
   }
   
-  /**
-   * Rejette une demande en mode mocké
-   */
   private rejectMockLeaveRequest(id: number): void {
     const index = this.allLeaveRequests.findIndex(r => r.id === id);
     if (index !== -1) {
@@ -752,9 +700,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     }
   }
   
-  /**
-   * Rejette une demande via l'API
-   */
   private rejectRealLeaveRequest(id: number): void {
     this.uiState.isLoading = true;
     
@@ -773,11 +718,7 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Annule une demande
-   */
   cancelLeaveRequest(request: LeaveRequest): void {
-    // Vérifier si on peut annuler
     if (request.statuts !== 'PENDING') {
       this.showNotification('⚠️ Seules les demandes en attente peuvent être annulées', 'warning');
       return;
@@ -805,9 +746,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     this.subscriptions.add(sub);
   }
   
-  /**
-   * Annule une demande en mode mocké
-   */
   private cancelMockLeaveRequest(id: number): void {
     const index = this.allLeaveRequests.findIndex(r => r.id === id);
     if (index !== -1) {
@@ -822,9 +760,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     }
   }
   
-  /**
-   * Annule une demande via l'API
-   */
   private cancelRealLeaveRequest(id: number): void {
     this.uiState.isLoading = true;
     
@@ -843,9 +778,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Ouvre le dialogue de visualisation des détails
-   */
   viewLeaveDetails(request: LeaveRequest): void {
     this.dialog.open(LeaveRequestFormComponent, {
       width: '600px',
@@ -857,9 +789,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Vérifie si une demande peut être modifiée
-   */
   canEditLeaveRequest(request: LeaveRequest): boolean {
     if (this.uiState.useMockData) {
       return request.statuts === 'PENDING';
@@ -871,15 +800,11 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
   // MÉTHODES UTILITAIRES
   // ============================================
   
-  /**
-   * Rafraîchit les données
-   */
   refreshData(): void {
     if (this.uiState.isRefreshing) return;
     
     this.uiState.isRefreshing = true;
     
-    // Debounce pour éviter les appels multiples
     if (this.refreshDebounce) {
       clearTimeout(this.refreshDebounce);
     }
@@ -894,16 +819,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     }, 300);
   }
   
-  /**
-   * Change l'onglet des demandes
-   */
-  switchLeaveSubTab(tab: 'myRequests' | 'allRequests'): void {
-    this.uiState.leaveSubTab = tab;
-  }
-  
-  /**
-   * Retourne le temps de réponse moyen formaté
-   */
   getLeaveAverageResponseTime(): string {
     if (!this.stats?.averageResponseTime || this.stats.averageResponseTime === 0) {
       return 'N/A';
@@ -912,16 +827,10 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     return `${avg.toFixed(1)} jour${avg > 1 ? 's' : ''}`;
   }
   
-  /**
-   * Retourne le nombre total de demandes en attente
-   */
   getTotalPendingLeaveRequests(): number {
     return this.allLeaveRequests.filter(r => r.statuts === 'PENDING').length;
   }
   
-  /**
-   * Affiche une notification
-   */
   private showNotification(message: string, type: 'success' | 'error' | 'warning' | 'info'): void {
     let panelClass = '';
     switch (type) {
@@ -939,9 +848,6 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
   
-  /**
-   * Bascule entre mode mocké et mode réel (pour développement)
-   */
   toggleMockMode(): void {
     this.uiState.useMockData = !this.uiState.useMockData;
     this.showNotification(
