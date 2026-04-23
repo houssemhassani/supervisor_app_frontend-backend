@@ -173,29 +173,17 @@ export class ManagerService {
     });
   }
 
-  private getUserId(): number | null {
-    if (this.currentUser?.id) {
-      return this.currentUser.id;
-    }
-    
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        if (user.id) return user.id;
-      } catch(e) {}
-    }
-    
-    const token = localStorage.getItem('token') || localStorage.getItem('jwt');
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        return payload.id || payload.userId || payload.sub;
-      } catch(e) {}
-    }
-    
+ private getUserId(): number | null {
+  const userStr = localStorage.getItem('user');
+  if (!userStr) return null;
+
+  try {
+    const user = JSON.parse(userStr);
+    return user?.id || null;
+  } catch {
     return null;
   }
+}
 
   private isManager(): boolean {
     if (this.currentUser?.role?.type === 'MANAGER') return true;
@@ -823,89 +811,40 @@ export class ManagerService {
 
 getUsers(): Observable<ApiResponse<User[]>> {
   const headers = this.getHeaders();
-  
-  // ✅ ENDPOINT CORRECT: /api/users (pas /api/users-permissions/users)
-  const url = `${this.apiUrl}/users?populate=role`;
-  
-  console.log('📡 [Manager] GET utilisateurs', url);
-  
-  return this.http.get<any>(url, { headers }).pipe(
-    map(response => {
-      console.log('📦 Réponse brute de /api/users:', response);
-      
-      let usersData: any[] = [];
-      
-      // Strapi v4: /api/users retourne directement un tableau
-      if (Array.isArray(response)) {
-        usersData = response;
-        console.log('✅ Format: tableau direct');
-      } 
-      // Si la réponse a une propriété 'data' qui est un tableau
-      else if (response?.data && Array.isArray(response.data)) {
-        usersData = response.data;
-        console.log('✅ Format: wrapper { data: [] }');
-      }
-      // Si la réponse a une propriété 'results'
-      else if (response?.results && Array.isArray(response.results)) {
-        usersData = response.results;
-        console.log('✅ Format: { results: [] }');
-      }
-      else {
-        console.warn('⚠️ Format de réponse inconnu:', typeof response);
-        usersData = [];
-      }
-      
-      // Transformer les données
-      const formattedUsers: User[] = usersData.map((user: any) => ({
-        id: user.id,
-        username: user.username || user.email?.split('@')[0] || `user_${user.id}`,
-        email: user.email || '',
-        firstName: user.firstname || user.firstName || '',
-        lastName: user.lastname || user.lastName || '',
-        role: user.role ? {
-          id: user.role.id,
-          name: user.role.name || 'unknown',
-          type: user.role.type || 'unknown'
-        } : undefined
-      }));
-      
-      console.log(`✅ ${formattedUsers.length} utilisateur(s) trouvé(s)`);
-      formattedUsers.forEach(u => {
-        console.log(`   - ID:${u.id} | ${u.username} | Rôle: ${u.role?.name || 'AUCUN'}`);
-      });
-      
+
+  return this.http
+    .get<any>(`${this.apiUrl}/users?populate=role`, { headers })
+    .pipe(
+      map((res: any): ApiResponse<User[]> => {
+
+        const rawUsers: any[] = Array.isArray(res) ? res : res.data ?? [];
+
+        const users: User[] = rawUsers.map((u: any): User => ({
+          id: u.id,
+          username: u.username,
+          email: u.email,
+          role: u.role
+        }));
+
+        return { data: users };
+      }),
+      catchError(() => of({ data: [] as User[] }))
+    );
+}
+getTeamMembers(): Observable<ApiResponse<User[]>> {
+  return this.getUsers().pipe(
+    map((response: ApiResponse<User[]>) => {
+
+      const filtered: User[] = (response.data || []).filter(
+        (user: User) => user.role?.type !== 'MANAGER'
+      );
+
       return {
-        data: formattedUsers,
-        meta: {}
-      } as ApiResponse<User[]>;
-    }),
-    catchError((error: HttpErrorResponse) => {
-      console.error('❌ Erreur getUsers:', error);
-      
-      // Afficher plus de détails sur l'erreur
-      if (error.status === 404) {
-        console.error('⚠️ Endpoint /api/users non trouvé. Vérifiez que l\'API Strapi est bien configurée.');
-      } else if (error.status === 401) {
-        console.error('⚠️ Non authentifié. Vérifiez que le token est valide.');
-      }
-      
-      return of({
-        data: [],
-        meta: {}
-      } as ApiResponse<User[]>);
+        data: filtered
+      };
     })
   );
 }
-
-  getTeamMembers(): Observable<ApiResponse<User[]>> {
-    return this.getUsers().pipe(
-      map(response => ({
-        ...response,
-        data: response.data.filter(user => user.role?.type !== 'MANAGER')
-      }))
-    );
-  }
-
   // ============================================
   // DASHBOARD STATS
   // ============================================
@@ -946,175 +885,125 @@ getUsers(): Observable<ApiResponse<User[]>> {
   // ATTENDANCE - GESTION DES PRÉSENCES
   // ============================================
 
-getAttendances(userId?: number, startDate?: string, endDate?: string): Observable<ApiResponse<Attendance[]>> {
+getAttendances(userId?: number, startDate?: string, endDate?: string) {
   const headers = this.getHeaders();
-  
-  // URL simple sans filtres
+
   let url = `${this.apiUrl}/attendances?sort=date:desc&populate=users_permissions_user`;
-  
-  console.log('📡 [Attendance] GET présences (sans filtres)', url);
-  
-  return this.http.get<ApiResponse<Attendance[]>>(url, { headers }).pipe(
-    map(response => {
-      let attendances = response.data || [];
-      
-      // Filtrer par utilisateur côté client
-      if (userId) {
-        attendances = attendances.filter(a => a.users_permissions_user?.id === userId);
-        console.log(`👤 Filtrage utilisateur ${userId}: ${response.data.length} -> ${attendances.length} présences`);
-      }
-      
-      // Filtrer par dates côté client
-      if (startDate && endDate && attendances.length > 0) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        
-        const beforeFilter = attendances.length;
-        attendances = attendances.filter(attendance => {
-          const attendanceDate = new Date(attendance.date);
-          return attendanceDate >= start && attendanceDate <= end;
-        });
-        
-        console.log(`📅 Filtrage dates: ${beforeFilter} -> ${attendances.length} présences`);
-      }
-      
-      return { ...response, data: attendances };
-    }),
-    tap(response => console.log(`✅ ${response.data?.length || 0} présences après filtrage`)),
-    catchError((error: HttpErrorResponse) => {
-      console.error('❌ [Attendance] Erreur:', error);
-      
-      return of({
-        data: [],
-        meta: { pagination: { total: 0, page: 1, pageSize: 100, pageCount: 0 } }
-      } as ApiResponse<Attendance[]>);
-    })
-  );
-}
 
-getTodayAttendances(): Observable<ApiResponse<Attendance[]>> {
-  // Au lieu d'utiliser getAttendances avec dates, faites un appel simple
-  const headers = this.getHeaders();
-  const url = `${this.apiUrl}/attendances?sort=date:desc&populate=users_permissions_user`;
-  
-  return this.http.get<ApiResponse<Attendance[]>>(url, { headers }).pipe(
-    map(response => {
-      const today = new Date().toISOString().split('T')[0];
-      const todayAttendances = response.data.filter(attendance => {
-        const attendanceDate = new Date(attendance.date).toISOString().split('T')[0];
-        return attendanceDate === today;
-      });
-      return { ...response, data: todayAttendances };
-    }),
-    catchError(error => {
-      console.error('❌ Erreur getTodayAttendances:', error);
-      return of({ data: [], meta: {} } as ApiResponse<Attendance[]>);
-    })
-  );
-}
-
- getAttendanceStats(userId: number, month: string): Observable<ApiResponse<AttendanceStats>> {
-  const headers = this.getHeaders();
-  
-  const [year, monthNum] = month.split('-');
-  const startDate = `${year}-${monthNum}-01`;
-  const endDate = new Date(parseInt(year), parseInt(monthNum), 0).toISOString().split('T')[0];
-  
-  // 🔥 Utiliser l'endpoint existant getMonthlyStats du contrôleur
-  const url = `${this.apiUrl}/attendances/monthly-stats?userId=${userId}&month=${monthNum}&year=${year}`;
-  
-  console.log('📡 [Attendance] GET stats', url);
-  
-  // Si l'endpoint personnalisé n'existe pas, calculer les stats côté client
-  return this.getAttendances(userId, startDate, endDate).pipe(
-    map(response => {
-      const attendances = response.data;
-      
-      // Calculer les stats manuellement
-      const stats: AttendanceStats = {
-        totalDays: attendances.length,
-        presentDays: 0,
-        absentDays: 0,
-        lateDays: 0,
-        halfDays: 0,
-        holidayDays: 0,
-        totalWorkHours: 0,
-        averageDailyHours: 0,
-        attendanceRate: 0,
-        punctualityRate: 0
-      };
-      
-      for (const attendance of attendances) {
-        switch (attendance.statuts) {
-          case 'PRESENT':
-            stats.presentDays++;
-            break;
-          case 'ABSENT':
-            stats.absentDays++;
-            break;
-          case 'LATE':
-            stats.lateDays++;
-            stats.presentDays++;
-            break;
-          case 'HALF_DAY':
-            stats.halfDays++;
-            break;
-          case 'HOLIDAY':
-            stats.holidayDays++;
-            break;
-        }
-        
-        if (attendance.work_hours) {
-          stats.totalWorkHours += attendance.work_hours;
-        }
-      }
-      
-      stats.totalWorkHours = parseFloat(stats.totalWorkHours.toFixed(2));
-      stats.averageDailyHours = stats.totalDays > 0 ? parseFloat((stats.totalWorkHours / stats.totalDays).toFixed(2)) : 0;
-      stats.attendanceRate = stats.totalDays > 0 ? parseFloat(((stats.presentDays + stats.halfDays) / stats.totalDays * 100).toFixed(2)) : 0;
-      
-      let onTimeCount = 0;
-      for (const attendance of attendances) {
-        if (attendance.check_in_late_minutes === 0 && attendance.check_in) {
-          onTimeCount++;
-        }
-      }
-      stats.punctualityRate = stats.presentDays > 0 ? parseFloat((onTimeCount / stats.presentDays * 100).toFixed(2)) : 0;
-      
-      return { data: stats, meta: {} } as ApiResponse<AttendanceStats>;
-    }),
-    catchError(error => {
-      console.error('❌ Erreur getAttendanceStats:', error);
-      return of({
-        data: {
-          totalDays: 0,
-          presentDays: 0,
-          absentDays: 0,
-          lateDays: 0,
-          halfDays: 0,
-          holidayDays: 0,
-          totalWorkHours: 0,
-          averageDailyHours: 0,
-          attendanceRate: 0,
-          punctualityRate: 0
-        },
-        meta: {}
-      } as ApiResponse<AttendanceStats>);
-    })
-  );
-}
-
-  exportAttendanceToPDF(userId: number, month: string): Observable<Blob> {
-    const headers = this.getHeaders();
-    const url = `${this.apiUrl}/attendances/export-pdf?userId=${userId}&month=${month}`;
-    
-    return this.http.get(url, { headers, responseType: 'blob' }).pipe(
-      tap(() => console.log(`📄 PDF exporté pour l'utilisateur ${userId} - ${month}`)),
-      catchError(error => this.handleError(error, 'Erreur lors de l\'export PDF'))
-    );
+  if (userId) {
+    url += `&filters[users_permissions_user][id][$eq]=${userId}`;
   }
+
+  if (startDate && endDate) {
+    url += `&filters[date][$gte]=${startDate}`;
+    url += `&filters[date][$lte]=${endDate}`;
+  }
+
+  return this.http.get<any>(url, { headers }).pipe(
+    map(res => ({
+      data: res.data ?? res,
+      meta: res.meta ?? {}
+    })),
+    catchError(err => this.handleError(err, 'Erreur attendances'))
+  );
+}
+
+getTodayAttendances() {
+  const today = new Date().toISOString().split('T')[0];
+
+  return this.getAttendances(undefined, today, today);
+}
+
+ getAttendanceStats(
+  userId: number,
+  month: string
+): Observable<ApiResponse<AttendanceStats>> {
+
+  const [yearStr, monthStr] = month.split('-');
+
+  const year = Number(yearStr);
+  const monthNum = Number(monthStr);
+
+  // premier jour du mois
+  const startDate: string = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+
+  // dernier jour du mois
+  const endDate: string = new Date(year, monthNum, 0)
+    .toISOString()
+    .split('T')[0];
+
+  return this.getAttendances(userId, startDate, endDate).pipe(
+    map((res: ApiResponse<Attendance[]>) => {
+
+      const data: Attendance[] = res.data ?? [];
+
+      const presentDays = data.filter(
+        (a: Attendance) => a.statuts === 'PRESENT'
+      ).length;
+
+      const absentDays = data.filter(
+        (a: Attendance) => a.statuts === 'ABSENT'
+      ).length;
+
+      const lateDays = data.filter(
+        (a: Attendance) => a.statuts === 'LATE'
+      ).length;
+
+      const halfDays = data.filter(
+        (a: Attendance) => a.statuts === 'HALF_DAY'
+      ).length;
+
+      const holidayDays = data.filter(
+        (a: Attendance) => a.statuts === 'HOLIDAY'
+      ).length;
+
+      const totalWorkHours = data.reduce(
+        (sum: number, a: Attendance) => sum + (a.work_hours ?? 0),
+        0
+      );
+
+      const totalDays = data.length;
+
+      const stats: AttendanceStats = {
+        totalDays,
+        presentDays,
+        absentDays,
+        lateDays,
+        halfDays,
+        holidayDays,
+        totalWorkHours,
+
+        averageDailyHours:
+          totalDays > 0 ? totalWorkHours / totalDays : 0,
+
+        attendanceRate:
+          totalDays > 0
+            ? ((presentDays + halfDays) / totalDays) * 100
+            : 0,
+
+        punctualityRate:
+          presentDays > 0
+            ? data.filter(
+                (a: Attendance) => a.check_in_late_minutes === 0
+              ).length / presentDays * 100
+            : 0
+      };
+
+      return { data: stats };
+    })
+  );
+}
+
+  exportAttendanceToPDF(userId: number, month: string) {
+  const headers = this.getHeaders();
+
+  const url = `${this.apiUrl}/attendances/export-pdf?userId=${userId}&month=${month}`;
+
+  return this.http.get(url, {
+    headers,
+    responseType: 'blob'
+  });
+}
 
   // ============================================
   // UTILITAIRES
