@@ -4,270 +4,214 @@
   <div class="page-header">
     <div class="header-left">
       <mat-icon>event_available</mat-icon>
-
       <div>
         <h1>Gestion des présences</h1>
-        <p>Suivi des présences et export des rapports mensuels</p>
+        <p>Liste des employés et suivi mensuel des présences</p>
       </div>
-    </div>
-
-    <div class="header-actions">
-      <button mat-stroked-button
-              (click)="exportAllToPDF()"
-              [disabled]="isLoading || employees.length === 0">
-
-        <mat-icon>file_download</mat-icon>
-        Exporter tous les PDF
-      </button>
     </div>
   </div>
 
+  <!-- ================= EMPLOYEES LIST ================= -->
+  <div class="employees-list" *ngIf="!isLoading">
 
-  <!-- ================= SUMMARY ================= -->
-  <div class="summary-grid" *ngIf="!isLoading">
+    <div class="employee-card" *ngFor="let employee of employees">
 
-    <div class="summary-card">
-      <mat-icon>people</mat-icon>
-      <div class="summary-value">{{ summaryStats.totalEmployees }}</div>
-      <div class="summary-label">Employés</div>
-    </div>
+      <!-- HEADER -->
+      <div class="employee-header" (click)="toggleEmployee(employee.id)">
+        <div class="employee-info">
+          <mat-icon class="employee-icon">person</mat-icon>
+          <div>
+            <h3>{{ employee.username }}</h3>
+            <p>{{ employee.email }} • {{ employee.position || 'Employé' }}</p>
+          </div>
+        </div>
 
-    <div class="summary-card present">
-      <mat-icon>check_circle</mat-icon>
-      <div class="summary-value">{{ summaryStats.presentToday }}</div>
-      <div class="summary-label">Présents</div>
-    </div>
+        <div class="employee-actions">
+          <button mat-raised-button color="primary"
+                  (click)="exportEmployeePDF(employee, $event)"
+                  [disabled]="isLoading">
+            <mat-icon>picture_as_pdf</mat-icon>
+            Télécharger fiche
+          </button>
 
-    <div class="summary-card absent">
-      <mat-icon>cancel</mat-icon>
-      <div class="summary-value">{{ summaryStats.absentToday }}</div>
-      <div class="summary-label">Absents</div>
-    </div>
-
-    <div class="summary-card late">
-      <mat-icon>warning</mat-icon>
-      <div class="summary-value">{{ summaryStats.lateToday }}</div>
-      <div class="summary-label">Retards</div>
-    </div>
-
-    <div class="summary-card rate">
-      <mat-icon>trending_up</mat-icon>
-      <div class="summary-value">{{ summaryStats.avgAttendanceRate }}%</div>
-      <div class="summary-label">Taux présence</div>
-    </div>
-
-  </div>
-
-
-  <!-- ================= FILTERS ================= -->
-  <div class="filters-card">
-    <div class="filters-row">
-
-      <!-- Employee -->
-      <mat-form-field appearance="outline">
-        <mat-label>Employé</mat-label>
-
-        <mat-select
-          [(ngModel)]="selectedEmployee"
-          (selectionChange)="onEmployeeChange($event.value)">
-
-          <mat-option *ngFor="let emp of employees" [value]="emp">
-            {{ emp.username }} ({{ emp.email }})
-          </mat-option>
-
-        </mat-select>
-      </mat-form-field>
-
-
-      <!-- Month -->
-      <mat-form-field appearance="outline">
-        <mat-label>Mois</mat-label>
-
-        <input matInput
-               type="month"
-               [(ngModel)]="selectedMonth"
-               (change)="onMonthChange()">
-      </mat-form-field>
-
-
-      <!-- Status -->
-      <mat-form-field appearance="outline">
-        <mat-label>Statut</mat-label>
-
-        <mat-select
-          [(ngModel)]="selectedStatus"
-          (selectionChange)="loadAttendanceData()">
-
-          <mat-option value="ALL">Tous</mat-option>
-          <mat-option value="PRESENT">Présent</mat-option>
-          <mat-option value="ABSENT">Absent</mat-option>
-          <mat-option value="LATE">Retard</mat-option>
-          <mat-option value="HALF_DAY">Demi-journée</mat-option>
-          <mat-option value="HOLIDAY">Congé</mat-option>
-
-        </mat-select>
-      </mat-form-field>
-
-
-      <!-- Export -->
-      <button mat-raised-button
-              color="primary"
-              (click)="exportToPDF()"
-              [disabled]="isLoading || !selectedEmployee">
-
-        <mat-icon>picture_as_pdf</mat-icon>
-        Export PDF
-      </button>
-
-    </div>
-  </div>
-
-
-  <!-- ================= STATS ================= -->
-  <div class="stats-card"
-       *ngIf="stats && !isLoadingStats">
-
-    <h3>
-      Statistiques - {{ selectedMonth }}
-    </h3>
-
-    <div class="stats-grid-mini">
-
-      <div class="stat-item">
-        <span>Jours ouvrés</span>
-        <strong>{{ stats.totalDays }}</strong>
-      </div>
-
-      <div class="stat-item">
-        <span>Présents</span>
-        <strong>{{ stats.presentDays }}</strong>
-      </div>
-
-      <div class="stat-item">
-        <span>Absents</span>
-        <strong>{{ stats.absentDays }}</strong>
-      </div>
-
-      <div class="stat-item">
-        <span>Retards</span>
-        <strong>{{ stats.lateDays }}</strong>
-      </div>
-
-      <div class="stat-item">
-        <span>Heures</span>
-        <strong>{{ stats.totalWorkHours }}h</strong>
-      </div>
-
-      <div class="stat-item highlight">
-        <span>Taux présence</span>
-        <strong>{{ attendanceRate }}%</strong>
-      </div>
-
-    </div>
-
-    <!-- Progress -->
-    <div class="progress-section">
-
-      <div class="progress-label">
-        <span>Assiduité</span>
-        <span>{{ attendanceRate }}%</span>
-      </div>
-
-      <div class="progress-bar">
-        <div class="progress-fill"
-             [style.width.%]="attendanceRate">
+          <mat-icon class="expand-icon"
+                    [class.expanded]="expandedEmployeeId === employee.id">
+            {{ expandedEmployeeId === employee.id ? 'expand_less' : 'expand_more' }}
+          </mat-icon>
         </div>
       </div>
 
-    </div>
+      <!-- ================= EXPANDED SECTION ================= -->
+      <div class="employee-attendance"
+           *ngIf="expandedEmployeeId === employee.id">
 
-  </div>
+        <!-- FILTERS -->
+        <div class="filters-card">
+          <div class="filters-row">
 
+            <!-- MONTH -->
+            <mat-form-field appearance="outline">
+              <mat-label>Mois</mat-label>
+              <input matInput type="month"
+                     [value]="employeeFilters.get(employee.id)?.month"
+                     (change)="onEmployeeMonthChange(employee.id, $event)">
+            </mat-form-field>
 
-  <!-- ================= TABLE ================= -->
-  <div class="table-card">
+            <!-- STATUS -->
+            <mat-form-field appearance="outline">
+              <mat-label>Statut</mat-label>
+              <mat-select
+                [value]="employeeFilters.get(employee.id)?.status"
+                (selectionChange)="onEmployeeStatusChange(employee.id, $event.value)">
 
-    <div class="table-header">
-      <h3>Présences</h3>
+                <mat-option value="ALL">Tous</mat-option>
+                <mat-option value="PRESENT">Présent</mat-option>
+                <mat-option value="ABSENT">Absent</mat-option>
+                <mat-option value="LATE">Retard</mat-option>
+                <mat-option value="HALF_DAY">Demi-journée</mat-option>
+                <mat-option value="HOLIDAY">Congé</mat-option>
 
-      <div class="table-search">
-        <mat-icon>search</mat-icon>
+              </mat-select>
+            </mat-form-field>
 
-        <input type="text"
-               placeholder="Recherche..."
-               [(ngModel)]="searchTerm"
-               (input)="loadAttendanceData()">
+            <!-- SEARCH -->
+            <div class="table-search">
+              <mat-icon>search</mat-icon>
+              <input type="text"
+                     placeholder="Rechercher..."
+                     [value]="employeeFilters.get(employee.id)?.search"
+                     (input)="onEmployeeSearch(employee.id, $event)">
+            </div>
+
+          </div>
+        </div>
+
+        <!-- STATS -->
+        <div class="stats-card" *ngIf="employeeStats.get(employee.id)">
+          <h3>Statistiques - {{ employeeFilters.get(employee.id)?.month }}</h3>
+
+          <div class="stats-grid-mini">
+            <div class="stat-item">
+              <span>Jours ouvrés</span>
+              <strong>{{ employeeStats.get(employee.id)?.totalDays || 0 }}</strong>
+            </div>
+
+            <div class="stat-item">
+              <span>Présents</span>
+              <strong>{{ employeeStats.get(employee.id)?.presentDays || 0 }}</strong>
+            </div>
+
+            <div class="stat-item">
+              <span>Absents</span>
+              <strong>{{ employeeStats.get(employee.id)?.absentDays || 0 }}</strong>
+            </div>
+
+            <div class="stat-item">
+              <span>Retards</span>
+              <strong>{{ employeeStats.get(employee.id)?.lateDays || 0 }}</strong>
+            </div>
+
+            <div class="stat-item">
+              <span>Heures travaillées</span>
+              <strong>{{ employeeStats.get(employee.id)?.totalWorkHours || 0 }}h</strong>
+            </div>
+
+            <div class="stat-item highlight">
+              <span>Taux présence</span>
+              <strong>{{ employeeStats.get(employee.id)?.attendanceRate || 0 }}%</strong>
+            </div>
+          </div>
+
+          <div class="progress-section">
+            <div class="progress-label">
+              <span>Assiduité</span>
+              <span>{{ employeeStats.get(employee.id)?.attendanceRate || 0 }}%</span>
+            </div>
+
+            <div class="progress-bar">
+              <div class="progress-fill"
+                   [style.width.%]="employeeStats.get(employee.id)?.attendanceRate || 0">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-card">
+
+          <div class="table-header">
+            <h3>Présences</h3>
+            <span class="record-count">
+              {{ getFilteredEmployeeAttendances(employee.id).length }} enregistrement(s)
+            </span>
+          </div>
+
+          <!-- LOADING -->
+          <div *ngIf="isLoadingAttendances.get(employee.id)" class="loading-state">
+            <mat-spinner diameter="40"></mat-spinner>
+            <p>Chargement des présences...</p>
+          </div>
+
+          <!-- TABLE -->
+          <div *ngIf="!isLoadingAttendances.get(employee.id)" class="table-wrapper">
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Arrivée</th>
+                  <th>Départ</th>
+                  <th>Heures</th>
+                  <th>Statut</th>
+                  <th>Retard</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                <tr *ngFor="let attendance of getFilteredEmployeeAttendances(employee.id)">
+                  <td>{{ formatDate(attendance.date) }}</td>
+                  <td>{{ formatTime(attendance.check_in) }}</td>
+                  <td>{{ formatTime(attendance.check_out) }}</td>
+                  <td>{{ attendance.work_hours || 0 }}h</td>
+
+                  <td>
+                    <span class="status-badge"
+                          [style.background]="getStatusColor(attendance.statuts)">
+                      {{ getStatusLabel(attendance.statuts) }}
+                    </span>
+                  </td>
+
+                  <td>
+                    <span *ngIf="attendance.check_in_late_minutes > 0">
+                      +{{ attendance.check_in_late_minutes }} min
+                    </span>
+                    <span *ngIf="!attendance.check_in_late_minutes">—</span>
+                  </td>
+
+                  <td>{{ attendance.notes || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- EMPTY -->
+            <div class="empty-state"
+                 *ngIf="getFilteredEmployeeAttendances(employee.id).length === 0">
+              <mat-icon>event_busy</mat-icon>
+              <p>Aucune présence trouvée pour ce mois</p>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     </div>
 
-
-    <!-- LOADING -->
-    <div *ngIf="isLoading" class="loading-state">
-      <mat-spinner diameter="40"></mat-spinner>
-      <p>Chargement...</p>
-    </div>
-
-
-    <!-- TABLE -->
-    <div *ngIf="!isLoading" class="table-wrapper">
-
-      <table>
-
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Arrivée</th>
-            <th>Départ</th>
-            <th>Heures</th>
-            <th>Statut</th>
-            <th>Retard</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-
-        <tbody>
-
-          <tr *ngFor="let a of getFilteredAttendances()">
-
-            <td>{{ formatDate(a.date) }}</td>
-            <td>{{ formatTime(a.check_in) }}</td>
-            <td>{{ formatTime(a.check_out) }}</td>
-            <td>{{ a.work_hours || 0 }}h</td>
-
-            <td>
-              <span class="status-badge"
-                    [style.background]="getStatusColor(a.statuts)">
-                {{ getStatusLabel(a.statuts) }}
-              </span>
-            </td>
-
-            <td>
-              <span *ngIf="a.check_in_late_minutes > 0">
-                +{{ a.check_in_late_minutes }} min
-              </span>
-              <span *ngIf="!a.check_in_late_minutes">—</span>
-            </td>
-
-            <td>{{ a.notes || '—' }}</td>
-
-          </tr>
-
-        </tbody>
-
-      </table>
-
-
-      <!-- EMPTY -->
-      <div class="empty-state"
-           *ngIf="getFilteredAttendances().length === 0">
-
-        <mat-icon>event_busy</mat-icon>
-        <p>Aucune présence trouvée</p>
-
-      </div>
-
+    <!-- NO EMPLOYEES -->
+    <div class="empty-state" *ngIf="employees.length === 0">
+      <mat-icon>people_outline</mat-icon>
+      <p>Aucun employé trouvé</p>
     </div>
 
   </div>
-
 </div>

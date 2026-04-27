@@ -12,8 +12,11 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  firstname?: string;
+  lastname?: string;
   firstName?: string;
   lastName?: string;
+  position?: string;
   role?: {
     id: number;
     name: string;
@@ -90,8 +93,8 @@ export interface Attendance {
     id: number;
     username: string;
     email: string;
-    firstName?: string;
-    lastName?: string;
+    firstname?: string;
+    lastname?: string;
   };
   date: string;
   check_in: string | null;
@@ -119,6 +122,35 @@ export interface AttendanceStats {
   punctualityRate: number;
 }
 
+export interface EmployeeWithAttendances {
+  id: number;
+  username: string;
+  email: string;
+  firstname: string;
+  lastname: string;
+  position: string;
+  attendances: Attendance[];
+  stats: AttendanceStats;
+}
+
+export interface GlobalSummary {
+  totalEmployees: number;
+  presentToday: number;
+  absentToday: number;
+  lateToday: number;
+  avgAttendanceRate: number;
+}
+
+export interface EmployeesWithAttendancesResponse {
+  employees: EmployeeWithAttendances[];
+  summary: GlobalSummary;
+  currentMonth: {
+    year: number;
+    month: number;
+    monthName: string;
+  };
+}
+
 export interface ApiResponse<T = any> {
   data: T;
   meta?: {
@@ -137,7 +169,7 @@ export interface ApiResponse<T = any> {
 export class ManagerService {
   private apiUrl: string;
   private currentUser: User | null = null;
-  private useMockData = true; // Mode mocké par défaut pour le développement
+  private useMockData = true;
 
   constructor(private http: HttpClient) {
     this.apiUrl = environment.apiUrl || 'http://localhost:1337/api';
@@ -173,17 +205,17 @@ export class ManagerService {
     });
   }
 
- private getUserId(): number | null {
-  const userStr = localStorage.getItem('user');
-  if (!userStr) return null;
+  private getUserId(): number | null {
+    const userStr = localStorage.getItem('user');
+    if (!userStr) return null;
 
-  try {
-    const user = JSON.parse(userStr);
-    return user?.id || null;
-  } catch {
-    return null;
+    try {
+      const user = JSON.parse(userStr);
+      return user?.id || null;
+    } catch {
+      return null;
+    }
   }
-}
 
   private isManager(): boolean {
     if (this.currentUser?.role?.type === 'MANAGER') return true;
@@ -235,6 +267,290 @@ export class ManagerService {
     
     console.error('❌ Erreur API:', error);
     return throwError(() => new Error(errorMessage));
+  }
+
+  // ============================================
+  // ATTENDANCE - NOUVELLES MÉTHODES
+  // ============================================
+
+  /**
+   * Récupère tous les employés avec leurs présences pour un mois donné
+   * @param month - Mois au format YYYY-MM
+   * @param status - Filtre par statut (optionnel)
+   */
+  getAllEmployeesWithAttendances(month: string, status?: string): Observable<ApiResponse<EmployeesWithAttendancesResponse>> {
+    const headers = this.getHeaders();
+    let url = `${this.apiUrl}/attendances/employees/all?month=${month}`;
+    
+    if (status && status !== 'ALL') {
+      url += `&status=${status}`;
+    }
+    
+    console.log('📡 [Manager] GET tous les employés avec présences');
+    
+    return this.http.get<ApiResponse<EmployeesWithAttendancesResponse>>(url, { headers }).pipe(
+      tap(response => console.log(`✅ ${response.data?.employees?.length || 0} employés trouvés`)),
+      catchError(error => this.handleError(error, 'Erreur lors du chargement des présences'))
+    );
+  }
+
+  /**
+   * Récupère les présences d'un employé spécifique pour un mois
+   * @param employeeId - ID de l'employé
+   * @param month - Mois au format YYYY-MM
+   * @param status - Filtre par statut (optionnel)
+   */
+  getEmployeeAttendancesByMonth(employeeId: number, month: string, status?: string): Observable<ApiResponse<any>> {
+    const headers = this.getHeaders();
+    let url = `${this.apiUrl}/attendances/employee/${employeeId}/month?month=${month}`;
+    
+    if (status && status !== 'ALL') {
+      url += `&status=${status}`;
+    }
+    
+    console.log(`📡 [Manager] GET présences employé #${employeeId} pour ${month}`);
+    
+    return this.http.get<ApiResponse<any>>(url, { headers }).pipe(
+      tap(response => console.log(`✅ ${response.data?.attendances?.length || 0} présences trouvées`)),
+      catchError(error => this.handleError(error, 'Erreur lors du chargement des présences'))
+    );
+  }
+
+  /**
+   * Récupère la liste simple de tous les employés
+   */
+  getAllEmployees(): Observable<ApiResponse<User[]>> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/employees`;
+    
+    console.log('📡 [Manager] GET liste des employés');
+    
+    return this.http.get<ApiResponse<User[]>>(url, { headers }).pipe(
+      tap(response => console.log(`✅ ${response.data?.length || 0} employés trouvés`)),
+      catchError(error => this.handleError(error, 'Erreur lors du chargement des employés'))
+    );
+  }
+
+  /**
+   * Récupère les présences avec filtres (méthode générique)
+   * @param employeeId - ID de l'employé (optionnel)
+   * @param month - Mois au format YYYY-MM (optionnel)
+   * @param status - Filtre par statut (optionnel)
+   */
+  getAttendances(employeeId?: number, month?: string, status?: string): Observable<ApiResponse<Attendance[]>> {
+    const headers = this.getHeaders();
+    let url = `${this.apiUrl}/attendances?`;
+    
+    const params: string[] = [];
+    
+    if (employeeId) {
+      params.push(`employeeId=${employeeId}`);
+    }
+    
+    if (month) {
+      params.push(`month=${month}`);
+    }
+    
+    if (status && status !== 'ALL') {
+      params.push(`status=${status}`);
+    }
+    
+    url += params.join('&');
+    
+    console.log('📡 [Manager] GET attendances avec filtres');
+    
+    return this.http.get<ApiResponse<Attendance[]>>(url, { headers }).pipe(
+      tap(response => console.log(`✅ ${response.data?.length || 0} présences trouvées`)),
+      catchError(error => this.handleError(error, 'Erreur lors du chargement des présences'))
+    );
+  }
+
+  /**
+   * Récupère les présences d'aujourd'hui
+   */
+  getTodayAttendances(): Observable<ApiResponse<Attendance[]>> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/today`;
+    
+    console.log('📡 [Manager] GET présences du jour');
+    
+    return this.http.get<ApiResponse<Attendance[]>>(url, { headers }).pipe(
+      tap(response => console.log(`✅ ${response.data?.length || 0} présences aujourd'hui`)),
+      catchError(error => this.handleError(error, 'Erreur lors du chargement des présences du jour'))
+    );
+  }
+
+  /**
+   * Récupère les statistiques de présence pour un employé et un mois
+   * @param userId - ID de l'employé
+   * @param month - Mois au format YYYY-MM
+   */
+  getAttendanceStats(userId: number, month: string): Observable<ApiResponse<AttendanceStats>> {
+    return this.getEmployeeAttendancesByMonth(userId, month).pipe(
+      map(response => {
+        const stats = response.data?.stats || {
+          totalDays: 0,
+          presentDays: 0,
+          absentDays: 0,
+          lateDays: 0,
+          halfDays: 0,
+          holidayDays: 0,
+          totalWorkHours: 0,
+          averageDailyHours: 0,
+          attendanceRate: 0,
+          punctualityRate: 0
+        };
+        return { data: stats };
+      }),
+      catchError(error => {
+        console.error('Erreur stats présence:', error);
+        return of({ 
+          data: {
+            totalDays: 0,
+            presentDays: 0,
+            absentDays: 0,
+            lateDays: 0,
+            halfDays: 0,
+            holidayDays: 0,
+            totalWorkHours: 0,
+            averageDailyHours: 0,
+            attendanceRate: 0,
+            punctualityRate: 0
+          }
+        });
+      })
+    );
+  }
+
+  /**
+   * Exporte la fiche de présence d'un employé en PDF
+   * @param employeeId - ID de l'employé
+   * @param month - Mois au format YYYY-MM
+   */
+exportEmployeePDF(employeeId: number, month: string): Observable<Blob> {
+  return this.http.get(
+    `${this.apiUrl}/attendances/export-pdf?employeeId=${employeeId}&month=${month}`,
+    {
+      headers: this.getHeaders(),
+      responseType: 'blob'
+    }
+  );
+}
+
+  /**
+   * Check-in pour l'employé connecté
+   */
+  checkIn(): Observable<any> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/checkin`;
+    
+    console.log('✅ [Manager] POST check-in');
+    
+    return this.http.post(url, {}, { headers }).pipe(
+      tap(response => console.log('✅ Check-in effectué', response)),
+      catchError(error => this.handleError(error, 'Erreur lors du check-in'))
+    );
+  }
+
+  /**
+   * Check-out pour l'employé connecté
+   */
+  checkOut(): Observable<any> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/checkout`;
+    
+    console.log('✅ [Manager] POST check-out');
+    
+    return this.http.post(url, {}, { headers }).pipe(
+      tap(response => console.log('✅ Check-out effectué', response)),
+      catchError(error => this.handleError(error, 'Erreur lors du check-out'))
+    );
+  }
+
+  /**
+   * Récupère le pointage du jour pour l'employé connecté
+   */
+  getTodayAttendance(): Observable<ApiResponse<Attendance>> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/today`;
+    
+    console.log('📡 [Manager] GET pointage du jour');
+    
+    return this.http.get<ApiResponse<Attendance>>(url, { headers }).pipe(
+      tap(response => console.log('✅ Pointage du jour récupéré', response)),
+      catchError(error => this.handleError(error, 'Erreur lors du chargement du pointage'))
+    );
+  }
+
+  /**
+   * Récupère les statistiques mensuelles pour l'employé connecté
+   * @param month - Mois (1-12)
+   * @param year - Année
+   */
+  getMyMonthlyStats(month?: number, year?: number): Observable<ApiResponse<any>> {
+    const headers = this.getHeaders();
+    const m = month || new Date().getMonth() + 1;
+    const y = year || new Date().getFullYear();
+    const url = `${this.apiUrl}/attendances/monthly-stats?month=${m}&year=${y}`;
+    
+    console.log('📡 [Manager] GET statistiques mensuelles');
+    
+    return this.http.get<ApiResponse<any>>(url, { headers }).pipe(
+      tap(response => console.log('✅ Stats mensuelles reçues', response)),
+      catchError(error => this.handleError(error, 'Erreur lors du chargement des stats'))
+    );
+  }
+
+  /**
+   * Crée une nouvelle entrée de présence (RH uniquement)
+   */
+  createAttendance(data: any): Observable<ApiResponse<Attendance>> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances`;
+    
+    const payload = { data };
+    
+    console.log('📝 [Manager] POST nouvelle présence');
+    
+    return this.http.post<ApiResponse<Attendance>>(url, payload, { headers }).pipe(
+      tap(response => console.log(`✅ Présence créée avec ID ${response.data.id}`)),
+      catchError(error => this.handleError(error, 'Erreur lors de la création'))
+    );
+  }
+
+  /**
+   * Met à jour une entrée de présence (RH uniquement)
+   * @param id - ID de la présence
+   * @param data - Données à mettre à jour
+   */
+  updateAttendance(id: number, data: any): Observable<ApiResponse<Attendance>> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/${id}`;
+    
+    const payload = { data };
+    
+    console.log(`📝 [Manager] PUT présence #${id}`);
+    
+    return this.http.put<ApiResponse<Attendance>>(url, payload, { headers }).pipe(
+      tap(response => console.log(`✅ Présence #${id} modifiée`)),
+      catchError(error => this.handleError(error, `Erreur lors de la modification`))
+    );
+  }
+
+  /**
+   * Supprime une entrée de présence (RH uniquement)
+   * @param id - ID de la présence
+   */
+  deleteAttendance(id: number): Observable<any> {
+    const headers = this.getHeaders();
+    const url = `${this.apiUrl}/attendances/${id}`;
+    
+    console.log(`🗑️ [Manager] DELETE présence #${id}`);
+    
+    return this.http.delete(url, { headers }).pipe(
+      tap(() => console.log(`✅ Présence #${id} supprimée`)),
+      catchError(error => this.handleError(error, `Erreur lors de la suppression`))
+    );
   }
 
   // ============================================
@@ -805,46 +1121,40 @@ export class ManagerService {
   // USERS
   // ============================================
 
- // ============================================
-// USERS
-// ============================================
+  getUsers(): Observable<ApiResponse<User[]>> {
+    const headers = this.getHeaders();
 
-getUsers(): Observable<ApiResponse<User[]>> {
-  const headers = this.getHeaders();
-
-  return this.http
-    .get<any>(`${this.apiUrl}/users?populate=role`, { headers })
-    .pipe(
-      map((res: any): ApiResponse<User[]> => {
-
-        const rawUsers: any[] = Array.isArray(res) ? res : res.data ?? [];
-
-        const users: User[] = rawUsers.map((u: any): User => ({
-          id: u.id,
-          username: u.username,
-          email: u.email,
-          role: u.role
-        }));
-
-        return { data: users };
-      }),
-      catchError(() => of({ data: [] as User[] }))
-    );
-}
-getTeamMembers(): Observable<ApiResponse<User[]>> {
-  return this.getUsers().pipe(
-    map((response: ApiResponse<User[]>) => {
-
-      const filtered: User[] = (response.data || []).filter(
-        (user: User) => user.role?.type !== 'MANAGER'
+    return this.http
+      .get<any>(`${this.apiUrl}/users?populate=role`, { headers })
+      .pipe(
+        map((res: any): ApiResponse<User[]> => {
+          const rawUsers: any[] = Array.isArray(res) ? res : res.data ?? [];
+          const users: User[] = rawUsers.map((u: any): User => ({
+            id: u.id,
+            username: u.username,
+            email: u.email,
+            firstname: u.firstname || u.firstName,
+            lastname: u.lastname || u.lastName,
+            position: u.position,
+            role: u.role
+          }));
+          return { data: users };
+        }),
+        catchError(() => of({ data: [] as User[] }))
       );
+  }
 
-      return {
-        data: filtered
-      };
-    })
-  );
-}
+  getTeamMembers(): Observable<ApiResponse<User[]>> {
+    return this.getUsers().pipe(
+      map((response: ApiResponse<User[]>) => {
+        const filtered: User[] = (response.data || []).filter(
+          (user: User) => user.role?.type !== 'MANAGER'
+        );
+        return { data: filtered };
+      })
+    );
+  }
+
   // ============================================
   // DASHBOARD STATS
   // ============================================
@@ -882,130 +1192,6 @@ getTeamMembers(): Observable<ApiResponse<User[]>> {
   }
 
   // ============================================
-  // ATTENDANCE - GESTION DES PRÉSENCES
-  // ============================================
-
-getAttendances(userId?: number, startDate?: string, endDate?: string) {
-  const headers = this.getHeaders();
-
-  let url = `${this.apiUrl}/attendances?sort=date:desc&populate=users_permissions_user`;
-
-  if (userId) {
-    url += `&filters[users_permissions_user][id][$eq]=${userId}`;
-  }
-
-  if (startDate && endDate) {
-    url += `&filters[date][$gte]=${startDate}`;
-    url += `&filters[date][$lte]=${endDate}`;
-  }
-
-  return this.http.get<any>(url, { headers }).pipe(
-    map(res => ({
-      data: res.data ?? res,
-      meta: res.meta ?? {}
-    })),
-    catchError(err => this.handleError(err, 'Erreur attendances'))
-  );
-}
-
-getTodayAttendances() {
-  const today = new Date().toISOString().split('T')[0];
-
-  return this.getAttendances(undefined, today, today);
-}
-
- getAttendanceStats(
-  userId: number,
-  month: string
-): Observable<ApiResponse<AttendanceStats>> {
-
-  const [yearStr, monthStr] = month.split('-');
-
-  const year = Number(yearStr);
-  const monthNum = Number(monthStr);
-
-  // premier jour du mois
-  const startDate: string = `${year}-${String(monthNum).padStart(2, '0')}-01`;
-
-  // dernier jour du mois
-  const endDate: string = new Date(year, monthNum, 0)
-    .toISOString()
-    .split('T')[0];
-
-  return this.getAttendances(userId, startDate, endDate).pipe(
-    map((res: ApiResponse<Attendance[]>) => {
-
-      const data: Attendance[] = res.data ?? [];
-
-      const presentDays = data.filter(
-        (a: Attendance) => a.statuts === 'PRESENT'
-      ).length;
-
-      const absentDays = data.filter(
-        (a: Attendance) => a.statuts === 'ABSENT'
-      ).length;
-
-      const lateDays = data.filter(
-        (a: Attendance) => a.statuts === 'LATE'
-      ).length;
-
-      const halfDays = data.filter(
-        (a: Attendance) => a.statuts === 'HALF_DAY'
-      ).length;
-
-      const holidayDays = data.filter(
-        (a: Attendance) => a.statuts === 'HOLIDAY'
-      ).length;
-
-      const totalWorkHours = data.reduce(
-        (sum: number, a: Attendance) => sum + (a.work_hours ?? 0),
-        0
-      );
-
-      const totalDays = data.length;
-
-      const stats: AttendanceStats = {
-        totalDays,
-        presentDays,
-        absentDays,
-        lateDays,
-        halfDays,
-        holidayDays,
-        totalWorkHours,
-
-        averageDailyHours:
-          totalDays > 0 ? totalWorkHours / totalDays : 0,
-
-        attendanceRate:
-          totalDays > 0
-            ? ((presentDays + halfDays) / totalDays) * 100
-            : 0,
-
-        punctualityRate:
-          presentDays > 0
-            ? data.filter(
-                (a: Attendance) => a.check_in_late_minutes === 0
-              ).length / presentDays * 100
-            : 0
-      };
-
-      return { data: stats };
-    })
-  );
-}
-
-  exportAttendanceToPDF(userId: number, month: string) {
-  const headers = this.getHeaders();
-
-  const url = `${this.apiUrl}/attendances/export-pdf?userId=${userId}&month=${month}`;
-
-  return this.http.get(url, {
-    headers,
-    responseType: 'blob'
-  });
-}
-
-  // ============================================
   // UTILITAIRES
   // ============================================
 
@@ -1017,31 +1203,27 @@ getTodayAttendances() {
     return this.isManager();
   }
 
-  // Ajoutez cette méthode dans votre ManagerService
-
-private formatDateForApi(date: string | Date): string {
-  if (!date) return '';
-  
-  let dateObj: Date;
-  if (typeof date === 'string') {
-    dateObj = new Date(date);
-  } else {
-    dateObj = date;
+  private formatDateForApi(date: string | Date): string {
+    if (!date) return '';
+    
+    let dateObj: Date;
+    if (typeof date === 'string') {
+      dateObj = new Date(date);
+    } else {
+      dateObj = date;
+    }
+    
+    if (isNaN(dateObj.getTime())) {
+      console.warn('⚠️ Date invalide:', date);
+      return '';
+    }
+    
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
   }
-  
-  // Vérifier si la date est valide
-  if (isNaN(dateObj.getTime())) {
-    console.warn('⚠️ Date invalide:', date);
-    return '';
-  }
-  
-  // Formater en YYYY-MM-DD
-  const year = dateObj.getFullYear();
-  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const day = String(dateObj.getDate()).padStart(2, '0');
-  
-  return `${year}-${month}-${day}`;
-}
 
   calculateDuration(startDate: string, endDate: string): number {
     const start = new Date(startDate);
