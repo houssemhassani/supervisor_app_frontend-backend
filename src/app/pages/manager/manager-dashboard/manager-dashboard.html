@@ -250,20 +250,12 @@
 
       <!-- ONGLET TÂCHES -->
       <div *ngIf="uiState.activeTab === 'tasks'" class="tab-content">
-        <div class="coming-soon">
-          <mat-icon>construction</mat-icon>
-          <h3>Module Tâches en cours de développement</h3>
-          <p>La gestion des tâches sera disponible prochainement</p>
-        </div>
+        <app-project-task></app-project-task>
       </div>
 
       <!-- ONGLET PROJETS -->
       <div *ngIf="uiState.activeTab === 'projects'" class="tab-content">
-        <div class="coming-soon">
-          <mat-icon>construction</mat-icon>
-          <h3>Module Projets en cours de développement</h3>
-          <p>La gestion des projets sera disponible prochainement</p>
-        </div>
+        <app-project-task></app-project-task>
       </div>
 
     </div>

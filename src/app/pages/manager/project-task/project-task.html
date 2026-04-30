@@ -8,120 +8,238 @@
     </button>
   </header>
 
+  <!-- LOADING STATE -->
+  <div class="loading-state" *ngIf="isLoading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Chargement des projets...</p>
+  </div>
+
   <!-- PROJECTS GRID -->
-  <section class="projects-grid">
+  <section class="projects-grid" *ngIf="!isLoading">
     <div class="project-card" *ngFor="let project of projects">
       <div class="card-top">
         <h2>{{ project.name }}</h2>
         <div class="card-actions">
-          <button (click)="openProjectForm(project)" matTooltip="Edit Project"><mat-icon>edit</mat-icon></button>
-          <button (click)="openConfirm(project, 'deleteProject')" matTooltip="Delete Project"><mat-icon>delete</mat-icon></button>
+          <button (click)="openProjectForm(project)" matTooltip="Edit Project">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button (click)="openConfirm(project, 'deleteProject')" matTooltip="Delete Project">
+            <mat-icon>delete</mat-icon>
+          </button>
         </div>
       </div>
 
       <p class="project-desc">{{ project.description || 'No description' }}</p>
 
+      <!-- PROJECT INFO -->
+      <div class="project-info">
+        <span class="status-badge" [ngClass]="project.statuts.toLowerCase()">
+          <mat-icon>{{ getStatusIcon(project.statuts) }}</mat-icon>
+          {{ getProjectStatusLabel(project.statuts) }}
+        </span>
+        <div class="dates">
+          <span><mat-icon>event</mat-icon> {{ formatDate(project.start_date) }}</span>
+          <span><mat-icon>event</mat-icon> {{ formatDate(project.end_date) }}</span>
+        </div>
+      </div>
+
       <!-- TASKS -->
       <div class="tasks-section">
-        <h3>Tasks</h3>
+        <div class="tasks-header">
+          <h3>Tasks</h3>
+          <span class="task-count">{{ getProjectTasks(project.id).length }} tâche(s)</span>
+        </div>
+        
         <div class="tasks-list">
-          <div class="task-card" *ngFor="let task of project.tasks">
+          <div class="task-card" *ngFor="let task of getProjectTasks(project.id)">
             <div class="task-left">
-              <h4>{{ task.title }}</h4>
-              <p>Assigned: {{ task.assigned_to?.firstName || '-' }}</p>
-              <p>Due: {{ task.due_date || '-' }}</p>
+              <div class="task-title">
+                <mat-icon class="task-icon" [ngClass]="task.statuts.toLowerCase()">
+                  {{ getStatusIcon(task.statuts) }}
+                </mat-icon>
+                <h4>{{ task.title }}</h4>
+              </div>
+              <p class="task-desc">{{ task.description | slice:0:100 }}{{ task.description?.length > 100 ? '...' : '' }}</p>
+              <div class="task-meta">
+                <span class="assigned-to">
+                  <mat-icon>person</mat-icon>
+                  {{ task.assigned_to?.firstName || task.assigned_to?.firstname || task.assigned_to?.username || 'Non assigné' }}
+                </span>
+                <span class="due-date" [class.overdue]="isOverdue(task.due_date) && task.statuts !== 'DONE'">
+                  <mat-icon>calendar_today</mat-icon>
+                  {{ formatDate(task.due_date) }}
+                </span>
+              </div>
             </div>
             <div class="task-right">
-              <span class="badge" [ngClass]="task.statuts.toLowerCase()">{{ task.statuts }}</span>
-              <span class="priority" [ngClass]="task.priority.toLowerCase()">{{ task.priority }}</span>
+              <span class="priority-badge" [ngClass]="task.priority.toLowerCase()">
+                {{ getTaskPriorityLabel(task.priority) }}
+              </span>
+              <span class="status-badge task-status" [ngClass]="task.statuts.toLowerCase()">
+                {{ getTaskStatusLabel(task.statuts) }}
+              </span>
               <div class="task-actions">
-                <button (click)="openTaskForm(project, task)" matTooltip="Edit"><mat-icon>edit</mat-icon></button>
-                <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete"><mat-icon>delete</mat-icon></button>
-                <button (click)="openConfirm(task, 'toggleTask')" matTooltip="Toggle Status"><mat-icon>toggle_on</mat-icon></button>
+                <button (click)="openTaskForm(project, task)" matTooltip="Edit Task">
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete Task">
+                  <mat-icon>delete</mat-icon>
+                </button>
+                <button (click)="updateTaskStatus(task, getNextStatus(task.statuts))" matTooltip="Change Status">
+                  <mat-icon>sync</mat-icon>
+                </button>
               </div>
             </div>
           </div>
+
+          <!-- EMPTY TASKS -->
+          <div class="empty-tasks" *ngIf="getProjectTasks(project.id).length === 0">
+            <mat-icon>assignment</mat-icon>
+            <p>Aucune tâche pour ce projet</p>
+          </div>
         </div>
-        <button class="btn-add-task" (click)="openTaskForm(project)"><mat-icon>add_circle</mat-icon> Add Task</button>
+        
+        <button class="btn-add-task" (click)="openTaskForm(project)">
+          <mat-icon>add_circle</mat-icon> Add Task
+        </button>
       </div>
+    </div>
+
+    <!-- EMPTY PROJECTS -->
+    <div class="empty-projects" *ngIf="projects.length === 0">
+      <mat-icon>folder_open</mat-icon>
+      <p>Aucun projet trouvé</p>
+      <button class="btn-add-project" (click)="openProjectForm()">
+        <mat-icon>add_circle_outline</mat-icon> Create your first project
+      </button>
     </div>
   </section>
 
-  <!-- MODAL : Project / Task Form -->
-  <div class="modal-backdrop" *ngIf="showProjectForm || showTaskForm">
-    <div class="modal-box">
+  <!-- MODAL : Project Form -->
+  <div class="modal-backdrop" *ngIf="showProjectForm">
+    <div class="modal-box project-modal">
+      <div class="modal-header">
+        <h2>{{ editingProject?.id === 0 ? 'Créer un projet' : 'Modifier le projet' }}</h2>
+        <button class="close-modal" (click)="closeProjectForm()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
 
-      <h2>
-        {{ showProjectForm ? (editingProject?.id===0?'New Project':'Edit Project') : (editingTask?.id===0?'New Task':'Edit Task') }}
-      </h2>
-
-      <form (ngSubmit)="showProjectForm ? saveProject() : saveTask()" #formRef="ngForm">
-
-        <!-- PROJECT FORM -->
-        <ng-container *ngIf="showProjectForm">
-          <div class="form-group">
-            <label>Name <span class="required">*</span></label>
-            <input type="text" [(ngModel)]="editingProject!.name" name="name" required placeholder="Enter project name">
-          </div>
-
-          <div class="form-group">
-            <label>Description</label>
-            <textarea [(ngModel)]="editingProject!.description" name="description" placeholder="Enter project description"></textarea>
-          </div>
-
-          <div class="form-group">
-            <label>Status</label>
-            <select [(ngModel)]="editingProject!.statuts" name="status">
-              <option *ngFor="let s of projectStatuses" [value]="s">{{ s }}</option>
-            </select>
-          </div>
-        </ng-container>
-
-        <!-- TASK FORM -->
-        <ng-container *ngIf="showTaskForm">
-          <div class="form-group">
-            <label>Title <span class="required">*</span></label>
-            <input type="text" [(ngModel)]="editingTask!.title" name="title" required placeholder="Enter task title">
-          </div>
-
-          <div class="form-group">
-            <label>Description</label>
-            <textarea [(ngModel)]="editingTask!.description" name="description" placeholder="Enter task description"></textarea>
-          </div>
-
-          <div class="form-group">
-            <label>Assigned To</label>
-            <select [(ngModel)]="editingTask!.assigned_to" name="assigned">
-              <option [ngValue]="null">Unassigned</option>
-              <option *ngFor="let user of users" [ngValue]="user">{{ user.firstName }} {{ user.lastName }}</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Status</label>
-            <select [(ngModel)]="editingTask!.statuts" name="status">
-              <option *ngFor="let s of taskStatuses" [value]="s">{{ s }}</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Priority</label>
-            <select [(ngModel)]="editingTask!.priority" name="priority">
-              <option *ngFor="let p of taskPriorities" [value]="p">{{ p }}</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Due Date</label>
-            <input type="date" [(ngModel)]="editingTask!.due_date" name="due_date">
-          </div>
-        </ng-container>
-
-        <div class="modal-actions">
-          <button type="submit" class="btn-primary" [disabled]="formRef.invalid"><mat-icon>save</mat-icon> Save</button>
-          <button type="button" class="btn-secondary" (click)="showProjectForm=false; showTaskForm=false"><mat-icon>close</mat-icon> Cancel</button>
+      <form (ngSubmit)="saveProject()" #projectFormRef="ngForm">
+        <div class="form-group">
+          <label>Nom du projet <span class="required">*</span></label>
+          <input type="text" [(ngModel)]="editingProject!.name" name="name" required 
+                 placeholder="Entrez le nom du projet">
         </div>
 
+        <div class="form-group">
+          <label>Description</label>
+          <textarea [(ngModel)]="editingProject!.description" name="description" 
+                    rows="4" placeholder="Décrivez le projet..."></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Date de début</label>
+            <input type="date" [(ngModel)]="editingProject!.start_date" name="start_date">
+          </div>
+
+          <div class="form-group">
+            <label>Date de fin</label>
+            <input type="date" [(ngModel)]="editingProject!.end_date" name="end_date">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Statut</label>
+          <select [(ngModel)]="editingProject!.statuts" name="status">
+            <option *ngFor="let s of projectStatuses" [value]="s">
+              {{ getProjectStatusLabel(s) }}
+            </option>
+          </select>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeProjectForm()">
+            <mat-icon>close</mat-icon> Annuler
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="projectFormRef.invalid">
+            <mat-icon>save</mat-icon> {{ editingProject?.id === 0 ? 'Créer' : 'Modifier' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL : Task Form -->
+  <div class="modal-backdrop" *ngIf="showTaskForm">
+    <div class="modal-box task-modal">
+      <div class="modal-header">
+        <h2>{{ editingTask?.id === 0 ? 'Créer une tâche' : 'Modifier la tâche' }}</h2>
+        <button class="close-modal" (click)="closeTaskForm()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <form (ngSubmit)="saveTask()" #taskFormRef="ngForm">
+        <div class="form-group">
+          <label>Titre <span class="required">*</span></label>
+          <input type="text" [(ngModel)]="editingTask!.title" name="title" required 
+                 placeholder="Entrez le titre de la tâche">
+        </div>
+
+        <div class="form-group">
+          <label>Description</label>
+          <textarea [(ngModel)]="editingTask!.description" name="description" 
+                    rows="3" placeholder="Décrivez la tâche..."></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Assigné à</label>
+            <select [(ngModel)]="editingTask!.assigned_to" name="assigned">
+              <option [ngValue]="null">Non assigné</option>
+              <option *ngFor="let user of users" [ngValue]="user">
+                {{ user.firstName || user.firstname || user.username }} 
+                {{ user.lastName || user.lastname || '' }}
+              </option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Date d'échéance</label>
+            <input type="date" [(ngModel)]="editingTask!.due_date" name="due_date">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Statut</label>
+            <select [(ngModel)]="editingTask!.statuts" name="status">
+              <option *ngFor="let s of taskStatuses" [value]="s">
+                {{ getTaskStatusLabel(s) }}
+              </option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Priorité</label>
+            <select [(ngModel)]="editingTask!.priority" name="priority">
+              <option *ngFor="let p of taskPriorities" [value]="p">
+                {{ getTaskPriorityLabel(p) }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeTaskForm()">
+            <mat-icon>close</mat-icon> Annuler
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="taskFormRef.invalid">
+            <mat-icon>save</mat-icon> {{ editingTask?.id === 0 ? 'Créer' : 'Modifier' }}
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -130,13 +248,17 @@
   <div class="modal-backdrop" *ngIf="showConfirmModal">
     <div class="modal-box confirm-modal">
       <div class="modal-header">
-        <mat-icon>{{ confirmAction.includes('delete') ? 'warning' : 'help_outline' }}</mat-icon>
+        <mat-icon class="warning-icon">{{ confirmAction.includes('delete') ? 'warning' : 'help_outline' }}</mat-icon>
         <h3>{{ getConfirmTitle() }}</h3>
       </div>
       <p>{{ getConfirmMessage() }}</p>
       <div class="modal-actions">
-        <button class="btn-primary" (click)="confirm()"><mat-icon>check_circle</mat-icon> Yes</button>
-        <button class="btn-secondary" (click)="cancelConfirm()"><mat-icon>cancel</mat-icon> No</button>
+        <button class="btn-danger" (click)="confirm()">
+          <mat-icon>check_circle</mat-icon> Confirmer
+        </button>
+        <button class="btn-secondary" (click)="cancelConfirm()">
+          <mat-icon>cancel</mat-icon> Annuler
+        </button>
       </div>
     </div>
   </div>

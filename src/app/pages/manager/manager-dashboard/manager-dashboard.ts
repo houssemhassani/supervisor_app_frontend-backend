@@ -13,6 +13,7 @@ import { LeaveRequestFormComponent } from '../leave-request-form/leave-request-f
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog';
 import { LeaveRequestListComponent } from '../leave-request-list/leave-request-list';
 import { AttendanceManagementComponent } from '../attendancemanagement/attendancemanagement';
+import { ProjectTaskComponent } from '../project-task/project-task';
 
 import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -162,7 +163,8 @@ const MOCK_LEAVE_REQUESTS: LeaveRequest[] = [
     MatCardModule,
     MatTooltipModule,
     LeaveRequestListComponent,
-    AttendanceManagementComponent
+    AttendanceManagementComponent,
+    ProjectTaskComponent
   ],
   templateUrl: './manager-dashboard.html',
   styleUrls: ['./manager-dashboard.scss']
