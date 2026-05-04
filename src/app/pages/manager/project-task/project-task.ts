@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
@@ -40,7 +40,8 @@ export class ProjectTaskComponent implements OnInit {
 
   constructor(
     private managerService: ManagerService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private cdr: ChangeDetectorRef  // AJOUTÉ
   ) {}
 
   ngOnInit(): void {
@@ -51,47 +52,117 @@ export class ProjectTaskComponent implements OnInit {
   // =========================
   // LOAD DATA
   // =========================
-  // Dans loadData() du project-task.ts
-loadData(): void {
-  this.isLoading = true;
-
-  console.log('🔄 Chargement des projets...');
-  
-  // Récupérer les projets
-  this.managerService.getAllProjects().subscribe({
-    next: (response) => {
-      console.log('📦 Réponse complète projets:', response);
-      this.projects = response.data || [];
-      console.log(`✅ ${this.projects.length} projets chargés`, this.projects);
-      
-      // Récupérer toutes les tâches
-      this.managerService.getAllTasks().subscribe({
-        next: (taskResponse) => {
-          this.tasks = taskResponse.data || [];
-          console.log(`✅ ${this.tasks.length} tâches chargées`);
-          this.isLoading = false;
-        },
-        error: (error) => {
-          console.error('❌ Erreur chargement tâches:', error);
-          this.isLoading = false;
-          this.snackBar.open('Erreur lors du chargement des tâches', 'Fermer', { duration: 3000 });
+  loadData(): void {
+    this.isLoading = true;
+    
+    // Forcer la détection des changements
+    this.cdr.detectChanges();
+    
+    this.managerService.getAllProjects().subscribe({
+      next: (response: any) => {
+        console.log('📦 Réponse complète:', response);
+        
+        // Gérer les différents formats de réponse
+        let rawProjects = [];
+        
+        if (response.data && Array.isArray(response.data)) {
+          // Format: { data: [...] }
+          rawProjects = response.data;
+        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          // Format: { data: { data: [...] } }
+          rawProjects = response.data.data;
+        } else if (Array.isArray(response)) {
+          // Format direct: [...]
+          rawProjects = response;
+        } else if (response.data && typeof response.data === 'object' && !Array.isArray(response.data)) {
+          // Format avec attributs
+          rawProjects = [response.data];
         }
-      });
-    },
-    error: (error) => {
-      console.error('❌ Erreur chargement projets:', error);
-      console.log('Détail erreur:', error);
-      this.isLoading = false;
-      this.snackBar.open('Erreur lors du chargement des projets', 'Fermer', { duration: 3000 });
-    }
-  });
-}
+        
+        console.log('📦 rawProjects:', rawProjects);
+        
+        // Transformer les données si nécessaire (format Strapi v5)
+        this.projects = rawProjects.map((item: any) => {
+          // Si l'item a une propriété 'attributes' (Strapi v4)
+          if (item.attributes) {
+            return {
+              id: item.id,
+              name: item.attributes.name,
+              description: item.attributes.description,
+              statuts: item.attributes.statuts,
+              start_date: item.attributes.start_date,
+              end_date: item.attributes.end_date,
+              users: item.attributes.users || []
+            };
+          }
+          // Si l'item a une propriété 'id' directement (format attendu)
+          return item;
+        });
+        
+        console.log('✅ Projets après transformation:', this.projects);
+        console.log('📊 Nombre de projets:', this.projects.length);
+        
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Erreur:', error);
+        this.isLoading = false;
+        this.cdr.detectChanges();
+        
+        let errorMessage = 'Erreur lors du chargement des projets';
+        if (error.status === 401) {
+          errorMessage = 'Erreur d\'authentification. Vérifiez les permissions dans Strapi.';
+        }
+        this.snackBar.open(errorMessage, 'Fermer', { duration: 4000 });
+      }
+    });
+    
+    // Charger les tâches
+    this.managerService.getAllTasks().subscribe({
+      next: (taskResponse: any) => {
+        let rawTasks = [];
+        
+        if (taskResponse.data && Array.isArray(taskResponse.data)) {
+          rawTasks = taskResponse.data;
+        } else if (taskResponse.data && taskResponse.data.data && Array.isArray(taskResponse.data.data)) {
+          rawTasks = taskResponse.data.data;
+        } else if (Array.isArray(taskResponse)) {
+          rawTasks = taskResponse;
+        }
+        
+        this.tasks = rawTasks.map((item: any) => {
+          if (item.attributes) {
+            return {
+              id: item.id,
+              title: item.attributes.title,
+              description: item.attributes.description,
+              statuts: item.attributes.statuts,
+              priority: item.attributes.priority,
+              due_date: item.attributes.due_date,
+              assigned_to: item.attributes.assigned_to,
+              project: item.attributes.project
+            };
+          }
+          return item;
+        });
+        
+        console.log(`✅ ${this.tasks.length} tâches chargées`);
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Erreur chargement tâches:', error);
+        this.cdr.detectChanges();
+      }
+    });
+  }
 
   loadUsers(): void {
     this.managerService.getUsers().subscribe({
       next: (response) => {
         this.users = response.data || [];
         console.log(`✅ ${this.users.length} utilisateurs chargés`);
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Erreur chargement utilisateurs:', error);
@@ -122,11 +193,13 @@ loadData(): void {
       };
     }
     this.showProjectForm = true;
+    this.cdr.detectChanges();
   }
 
   closeProjectForm(): void {
     this.showProjectForm = false;
     this.editingProject = null;
+    this.cdr.detectChanges();
   }
 
   saveProject(): void {
@@ -189,7 +262,6 @@ loadData(): void {
     if (task) {
       this.editingTask = { ...task };
     } else {
-      const today = new Date().toISOString().split('T')[0];
       const nextWeek = new Date();
       nextWeek.setDate(nextWeek.getDate() + 7);
       const nextWeekStr = nextWeek.toISOString().split('T')[0];
@@ -206,12 +278,14 @@ loadData(): void {
       };
     }
     this.showTaskForm = true;
+    this.cdr.detectChanges();
   }
 
   closeTaskForm(): void {
     this.showTaskForm = false;
     this.editingTask = null;
     this.selectedProject = null;
+    this.cdr.detectChanges();
   }
 
   saveTask(): void {
@@ -301,11 +375,13 @@ loadData(): void {
     this.selectedItem = item;
     this.confirmAction = action;
     this.showConfirmModal = true;
+    this.cdr.detectChanges();
   }
 
   cancelConfirm(): void {
     this.selectedItem = null;
     this.showConfirmModal = false;
+    this.cdr.detectChanges();
   }
 
   confirm(): void {
