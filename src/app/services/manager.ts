@@ -65,6 +65,7 @@ export interface Project {
   end_date: string;
   users?: User[];
   creator?: User;
+  tasks?: Task[];
   created_at?: string;
   updated_at?: string;
 }
@@ -993,15 +994,23 @@ exportEmployeePDF(employeeId: number, month: string): Observable<Blob> {
   // ============================================
 
   getAllProjects(): Observable<ApiResponse<Project[]>> {
-    const url = `${this.apiUrl}/projects?sort=createdAt:desc&populate=users&populate=creator`;
+    // Version simplifiée pour Strapi v5
+    const url = `${this.apiUrl}/projects?sort=createdAt:desc&populate=users&populate=creator&populate=tasks`;
+    
     console.log('📡 [Manager] GET tous les projets');
     const headers = this.getHeaders();
     
     return this.http.get<ApiResponse<Project[]>>(url, { headers }).pipe(
-      tap(response => console.log(`✅ ${response.data?.length || 0} projets trouvés`)),
+      tap(response => {
+        console.log(`✅ ${response.data?.length || 0} projets trouvés`);
+        // Vérifier si les tâches sont présentes
+        if (response.data && response.data.length > 0) {
+          console.log('📋 Tâches du premier projet:', response.data[0].tasks);
+        }
+      }),
       catchError(error => this.handleError(error, 'Erreur lors du chargement des projets'))
     );
-  }
+}
 
   getMyProjects(): Observable<ApiResponse<Project[]>> {
     const userId = this.getUserId();

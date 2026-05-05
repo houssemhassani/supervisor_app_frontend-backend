@@ -7,7 +7,8 @@
     <p>📦 Nombre de projets: {{ projects.length }}</p>
     <p *ngIf="projects.length > 0">🏷️ Premier projet: {{ projects[0]?.name }}</p>
     <p *ngIf="projects.length === 0">⚠️ Aucun projet trouvé</p>
-    <p>📋 Nombre de tâches: {{ tasks.length }}</p>
+    <p>📋 Nombre de tâches totales: {{ tasks.length }}</p>
+    <p *ngIf="projects.length > 0">📋 Tâches du premier projet: {{ projects[0]?.tasks?.length || 0 }}</p>
   </div>
 
   <!-- HEADER -->
@@ -36,7 +37,7 @@
     </div>
 
     <!-- Affichage des projets -->
-    <div class="project-card" *ngFor="let project of projects">
+    <div class="project-card" *ngFor="let project of projects; trackBy: trackProjectById">
       <div class="card-top">
         <h2>{{ project.name }}</h2>
         <div class="card-actions">
@@ -49,7 +50,20 @@
         </div>
       </div>
 
+      <!-- Description -->
       <p class="project-desc">{{ project.description || 'No description' }}</p>
+
+      <!-- Informations créateur -->
+      <div class="project-creator" *ngIf="project.creator">
+        <mat-icon>person_outline</mat-icon>
+        <span>Créé par: {{ project.creator?.username || project.creator?.firstName || project.creator?.email || 'Inconnu' }}</span>
+      </div>
+
+      <!-- Informations équipe -->
+      <div class="project-team" *ngIf="project.users && project.users.length > 0">
+        <mat-icon>group</mat-icon>
+        <span>Équipe: {{ project.users.length }} membre(s)</span>
+      </div>
 
       <!-- PROJECT INFO -->
       <div class="project-info">
@@ -67,11 +81,12 @@
       <div class="tasks-section">
         <div class="tasks-header">
           <h3>Tasks</h3>
-          <span class="task-count">{{ getProjectTasks(project.id).length }} tâche(s)</span>
+          <span class="task-count">{{ project.tasks?.length || 0 }} tâche(s)</span>
         </div>
         
         <div class="tasks-list">
-          <div class="task-card" *ngFor="let task of getProjectTasks(project.id)">
+          <!-- Affichage des tâches - CORRECTION ICI : utilisation directe de project.tasks -->
+          <div class="task-card" *ngFor="let task of project.tasks; trackBy: trackTaskById">
             <div class="task-left">
               <div class="task-title">
                 <mat-icon class="task-icon" [ngClass]="(task.statuts || 'TODO').toLowerCase()">
@@ -113,7 +128,7 @@
           </div>
 
           <!-- EMPTY TASKS -->
-          <div class="empty-tasks" *ngIf="getProjectTasks(project.id).length === 0">
+          <div class="empty-tasks" *ngIf="!project.tasks || project.tasks.length === 0">
             <mat-icon>assignment</mat-icon>
             <p>Aucune tâche pour ce projet</p>
           </div>
