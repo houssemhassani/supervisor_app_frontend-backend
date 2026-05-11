@@ -6,7 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ManagerService, Project, Task, User } from '../../../services/manager';
-    import { forkJoin } from 'rxjs';
+import { forkJoin } from 'rxjs';
 
 @Component({
   selector: 'app-project-task',
@@ -26,6 +26,10 @@ export class ProjectTaskComponent implements OnInit {
   showProjectForm = false;
   showTaskForm = false;
   showConfirmModal = false;
+  
+  // View mode: 'list' ou 'kanban'
+  viewMode: 'list' | 'kanban' = 'list';
+  selectedProjectForKanban: Project | null = null;
 
   editingProject: Project | null = null;
   editingTask: Task | null = null;
@@ -39,10 +43,17 @@ export class ProjectTaskComponent implements OnInit {
   taskStatuses = ['TODO', 'IN_PROGRESS', 'DONE'];
   taskPriorities = ['LOW', 'MEDIUM', 'HIGH'];
 
+  // Colonnes Kanban
+  kanbanColumns = [
+    { status: 'TODO', title: 'À faire', icon: 'pending', color: '#f59e0b' },
+    { status: 'IN_PROGRESS', title: 'En cours', icon: 'play_circle', color: '#3b82f6' },
+    { status: 'DONE', title: 'Terminé', icon: 'check_circle', color: '#10b981' }
+  ];
+
   constructor(
     private managerService: ManagerService,
     private snackBar: MatSnackBar,
-    private cdr: ChangeDetectorRef  // AJOUTÉ
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -51,188 +62,257 @@ export class ProjectTaskComponent implements OnInit {
   }
 
   // =========================
+  // UTILITAIRES
+  // =========================
+
+  /**
+   * Extrait le texte d'un bloc Strapi (type 'blocks')
+   */
+  getTextFromBlocks(blocks: any): string {
+    if (!blocks) return '';
+    if (typeof blocks === 'string') return blocks;
+    if (Array.isArray(blocks)) {
+      return blocks.map(block => {
+        if (block.children) {
+          return block.children.map((child: any) => child.text || '').join('');
+        }
+        return '';
+      }).join(' ');
+    }
+    return '';
+  }
+
+  /**
+   * Extrait le nom d'un utilisateur depuis un objet
+   */
+  getUserName(user: any): string {
+    if (!user) return 'Inconnu';
+    return user.username || user.email || 'Inconnu';
+  }
+
+  /**
+   * Extrait le nom complet d'un utilisateur
+   */
+  getUserFullName(user: any): string {
+    if (!user) return 'Non assigné';
+    if (user.username) return user.username;
+    return 'Non assigné';
+  }
+
+  /**
+   * Élimine les doublons d'un tableau par propriété ID
+   */
+  private uniqueBy<T extends { id: number }>(array: T[]): T[] {
+    const seen = new Set<number>();
+    return array.filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }
+
+  // =========================
+  // VIEW MODE
+  // =========================
+  
+  setViewMode(mode: 'list' | 'kanban'): void {
+    this.viewMode = mode;
+    if (mode === 'list') {
+      this.selectedProjectForKanban = null;
+    }
+    this.cdr.detectChanges();
+  }
+  
+  selectProjectForKanban(project: Project): void {
+    console.log('📋 Projet sélectionné pour Kanban:', project);
+    console.log('📋 Tâches du projet:', project.tasks);
+    this.selectedProjectForKanban = project;
+    this.viewMode = 'kanban';
+    this.cdr.detectChanges();
+  }
+  
+  backToList(): void {
+    this.viewMode = 'list';
+    this.selectedProjectForKanban = null;
+    this.cdr.detectChanges();
+  }
+  
+  // Récupère les tâches d'un projet par statut pour le Kanban
+  getTasksByStatus(projectId: number, status: string): Task[] {
+    console.log(`🔍 Recherche tâches avec statut ${status} pour projet ${projectId}`);
+    
+    const project = this.projects.find(p => p.id === projectId);
+    if (!project) {
+      console.log('❌ Projet non trouvé');
+      return [];
+    }
+    
+    console.log('📋 Projet trouvé:', project.name);
+    console.log('📋 Tâches du projet:', project.tasks);
+    
+    if (project && project.tasks && project.tasks.length > 0) {
+      const filtered = project.tasks.filter(task => task.statuts === status);
+      console.log(`✅ ${filtered.length} tâches trouvées pour le statut ${status}`);
+      return filtered;
+    }
+    
+    // Fallback: filtrer depuis this.tasks
+    const filteredFromGlobal = this.tasks.filter(task => task.project?.id === projectId && task.statuts === status);
+    console.log(`✅ ${filteredFromGlobal.length} tâches trouvées (fallback)`);
+    return filteredFromGlobal;
+  }
+  
+  // Récupère toutes les tâches d'un projet
+  getProjectTasks(projectId: number): Task[] {
+    const project = this.projects.find(p => p.id === projectId);
+    if (project && project.tasks && project.tasks.length > 0) {
+      return project.tasks;
+    }
+    const filteredTasks = this.tasks.filter(task => task.project?.id === projectId);
+    if (filteredTasks.length > 0 && project) {
+      project.tasks = filteredTasks;
+    }
+    return filteredTasks;
+  }
+
+  // =========================
   // LOAD DATA
   // =========================
-loadData(): void {
-  this.isLoading = true;
-  this.cdr.detectChanges();
-  
-  // Utiliser forkJoin pour attendre les deux appels
-  forkJoin({
-    projects: this.managerService.getAllProjects(),
-    tasks: this.managerService.getAllTasks()
-  }).subscribe({
-    next: (result: any) => {
-      console.log('📦 Réponse complète projets:', result.projects);
-      console.log('📦 Réponse complète tâches:', result.tasks);
-      
-      // ==================== TRAITEMENT DES PROJETS ====================
-      let rawProjects = [];
-      const projectsResponse = result.projects;
-      
-      if (projectsResponse.data && Array.isArray(projectsResponse.data)) {
-        rawProjects = projectsResponse.data;
-      } else if (projectsResponse.data && projectsResponse.data.data && Array.isArray(projectsResponse.data.data)) {
-        rawProjects = projectsResponse.data.data;
-      } else if (Array.isArray(projectsResponse)) {
-        rawProjects = projectsResponse;
-      }
-      
-      console.log('📦 rawProjects:', rawProjects);
-      
-      // Transformer les projets
-      this.projects = rawProjects.map((item: any) => {
-        // Format Strapi v4 (avec attributes)
-        if (item.attributes) {
-          return {
-            id: item.id,
-            name: item.attributes.name,
-            description: item.attributes.description,
-            statuts: item.attributes.statuts,
-            start_date: item.attributes.start_date,
-            end_date: item.attributes.end_date,
-            users: item.attributes.users || [],
-            creator: item.attributes.creator,
-            tasks: item.attributes.tasks || []
-          };
-        }
-        // Format Strapi v5 (direct)
-        return {
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          statuts: item.statuts,
-          start_date: item.start_date,
-          end_date: item.end_date,
-          users: item.users || [],
-          creator: item.creator,
-          tasks: item.tasks || []
-        };
-      });
-      
-      console.log('✅ Projets après transformation:', this.projects);
-      console.log('📊 Nombre de projets:', this.projects.length);
-      
-      // Afficher les tâches de chaque projet
-      this.projects.forEach(project => {
-        console.log(`📋 Projet "${project.name}" a ${project.tasks?.length || 0} tâches`);
-        if (project.tasks && project.tasks.length > 0) {
-          console.log('   Tâches:', project.tasks.map((t: any) => t.title));
-        }
-      });
-      
-      // ==================== TRAITEMENT DES TÂCHES ====================
-      let rawTasks = [];
-      const tasksResponse = result.tasks;
-      
-      if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
-        rawTasks = tasksResponse.data;
-      } else if (tasksResponse.data && tasksResponse.data.data && Array.isArray(tasksResponse.data.data)) {
-        rawTasks = tasksResponse.data.data;
-      } else if (Array.isArray(tasksResponse)) {
-        rawTasks = tasksResponse;
-      }
-      
-      this.tasks = rawTasks.map((item: any) => {
-        if (item.attributes) {
-          return {
-            id: item.id,
-            title: item.attributes.title,
-            description: item.attributes.description,
-            statuts: item.attributes.statuts,
-            priority: item.attributes.priority,
-            due_date: item.attributes.due_date,
-            assigned_to: item.attributes.assigned_to,
-            project: item.attributes.project
-          };
-        }
-        return {
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          statuts: item.statuts,
-          priority: item.priority,
-          due_date: item.due_date,
-          assigned_to: item.assigned_to,
-          project: item.project
-        };
-      });
-      
-      console.log(`✅ ${this.tasks.length} tâches chargées séparément`);
-      
-      // SI LES TÂCHES NE SONT PAS DANS LES PROJETS, ON LES ASSOCIE MANUELLEMENT
-      if (this.projects.length > 0 && this.tasks.length > 0) {
-        // Vérifier si les projets ont déjà des tâches
-        const hasTasksInProjects = this.projects.some(p => p.tasks && p.tasks.length > 0);
+  loadData(): void {
+    this.isLoading = true;
+    this.cdr.detectChanges();
+    
+    forkJoin({
+      projects: this.managerService.getAllProjects(),
+      tasks: this.managerService.getAllTasks()
+    }).subscribe({
+      next: (result: any) => {
+        console.log('📦 Réponse complète projets:', result.projects);
+        console.log('📦 Réponse complète tâches:', result.tasks);
         
-        if (!hasTasksInProjects) {
-          console.log('🔄 Association manuelle des tâches aux projets...');
-          // Associer les tâches aux projets
-          this.projects = this.projects.map(project => {
-            const projectTasks = this.tasks.filter((task: Task) => task.project?.id === project.id);
-            return { ...project, tasks: projectTasks };
-          });
-          console.log('✅ Tâches associées manuellement');
-          this.projects.forEach(project => {
-            console.log(`📋 Projet "${project.name}" a maintenant ${project.tasks?.length || 0} tâches`);
-          });
+        // Traitement des projets
+        let rawProjects = [];
+        const projectsResponse = result.projects;
+        
+        if (projectsResponse.data && Array.isArray(projectsResponse.data)) {
+          rawProjects = projectsResponse.data;
+        } else if (projectsResponse.data && projectsResponse.data.data && Array.isArray(projectsResponse.data.data)) {
+          rawProjects = projectsResponse.data.data;
+        } else if (Array.isArray(projectsResponse)) {
+          rawProjects = projectsResponse;
         }
+        
+        this.projects = rawProjects.map((item: any) => {
+          if (item.attributes) {
+            return {
+              id: item.id,
+              name: item.attributes.name,
+              description: item.attributes.description,
+              statuts: item.attributes.statuts,
+              start_date: item.attributes.start_date,
+              end_date: item.attributes.end_date,
+              users: item.attributes.users || [],
+              creator: item.attributes.creator,
+              tasks: item.attributes.tasks || []
+            };
+          }
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            statuts: item.statuts,
+            start_date: item.start_date,
+            end_date: item.end_date,
+            users: item.users || [],
+            creator: item.creator,
+            tasks: item.tasks || []
+          };
+        });
+        
+        // Éliminer les doublons de projets
+        this.projects = this.uniqueBy(this.projects);
+        console.log('✅ Projets après transformation et dédoublonnage:', this.projects);
+        
+        // Afficher les tâches de chaque projet
+        this.projects.forEach(project => {
+          console.log(`📋 Projet "${project.name}" a ${project.tasks?.length || 0} tâches`);
+          if (project.tasks && project.tasks.length > 0) {
+            project.tasks.forEach(task => {
+              console.log(`   - ${task.title} : statut = "${task.statuts}"`);
+            });
+          }
+        });
+        
+        // Traitement des tâches
+        let rawTasks = [];
+        const tasksResponse = result.tasks;
+        
+        if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
+          rawTasks = tasksResponse.data;
+        } else if (tasksResponse.data && tasksResponse.data.data && Array.isArray(tasksResponse.data.data)) {
+          rawTasks = tasksResponse.data.data;
+        } else if (Array.isArray(tasksResponse)) {
+          rawTasks = tasksResponse;
+        }
+        
+        this.tasks = rawTasks.map((item: any) => {
+          if (item.attributes) {
+            return {
+              id: item.id,
+              title: item.attributes.title,
+              description: item.attributes.description,
+              statuts: item.attributes.statuts,
+              priority: item.attributes.priority,
+              due_date: item.attributes.due_date,
+              assigned_to: item.attributes.assigned_to,
+              project: item.attributes.project
+            };
+          }
+          return {
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            statuts: item.statuts,
+            priority: item.priority,
+            due_date: item.due_date,
+            assigned_to: item.assigned_to,
+            project: item.project
+          };
+        });
+        
+        // Éliminer les doublons de tâches
+        this.tasks = this.uniqueBy(this.tasks);
+        console.log(`✅ ${this.tasks.length} tâches chargées`);
+        
+        // Association manuelle si nécessaire
+        if (this.projects.length > 0 && this.tasks.length > 0) {
+          const hasTasksInProjects = this.projects.some(p => p.tasks && p.tasks.length > 0);
+          if (!hasTasksInProjects) {
+            console.log('🔄 Association manuelle des tâches aux projets...');
+            this.projects = this.projects.map(project => {
+              const projectTasks = this.tasks.filter((task: Task) => task.project?.id === project.id);
+              return { ...project, tasks: projectTasks };
+            });
+            console.log('✅ Tâches associées manuellement');
+          }
+        }
+        
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Erreur globale:', error);
+        this.isLoading = false;
+        this.cdr.detectChanges();
+        
+        let errorMessage = 'Erreur lors du chargement des données';
+        if (error.status === 401) {
+          errorMessage = 'Erreur d\'authentification. Vérifiez les permissions dans Strapi.';
+        }
+        this.snackBar.open(errorMessage, 'Fermer', { duration: 4000 });
       }
-      
-      this.isLoading = false;
-      this.cdr.detectChanges();
-    },
-    error: (error) => {
-      console.error('❌ Erreur globale:', error);
-      this.isLoading = false;
-      this.cdr.detectChanges();
-      
-      let errorMessage = 'Erreur lors du chargement des données';
-      if (error.status === 401) {
-        errorMessage = 'Erreur d\'authentification. Vérifiez les permissions dans Strapi.';
-      }
-      this.snackBar.open(errorMessage, 'Fermer', { duration: 4000 });
-    }
-  });
-}
-
-/**
- * Récupère les tâches d'un projet spécifique
- * Utilise d'abord project.tasks si disponible, sinon filtre depuis this.tasks
- */
-getProjectTasks(projectId: number): Task[] {
-  // Chercher le projet dans la liste
-  const project = this.projects.find(p => p.id === projectId);
-  
-  // Si le projet existe et qu'il a des tâches, les retourner directement
-  if (project && project.tasks && project.tasks.length > 0) {
-    return project.tasks;
+    });
   }
-  
-  // Sinon, filtrer depuis le tableau global this.tasks
-  const filteredTasks = this.tasks.filter(task => task.project?.id === projectId);
-  
-  // Si on trouve des tâches via le filtrage, les associer au projet pour la prochaine fois
-  if (filteredTasks.length > 0 && project) {
-    project.tasks = filteredTasks;
-  }
-  
-  return filteredTasks;
-}
-
-/**
- * Fonction trackBy pour optimiser le rendu des projets
- */
-trackProjectById(index: number, project: Project): number {
-  return project.id;
-}
-
-/**
- * Fonction trackBy pour optimiser le rendu des tâches
- */
-trackTaskById(index: number, task: Task): number {
-  return task.id;
-}
 
   loadUsers(): void {
     this.managerService.getUsers().subscribe({
@@ -424,14 +504,18 @@ trackTaskById(index: number, task: Task): number {
   updateTaskStatus(task: Task, newStatus: string): void {
     if (!task || task.statuts === newStatus) return;
     
+    const oldStatus = task.statuts;
+    task.statuts = newStatus as "TODO" | "IN_PROGRESS" | "DONE";
+    
     this.managerService.updateTaskStatus(task.id, newStatus).subscribe({
       next: () => {
-        this.snackBar.open(`✅ Statut mis à jour: ${this.getTaskStatusLabel(newStatus)}`, 'Fermer', { duration: 2000 });
+        this.snackBar.open(`✅ Tâche déplacée vers ${this.getTaskStatusLabel(newStatus)}`, 'Fermer', { duration: 2000 });
         this.loadData();
       },
       error: (error) => {
         console.error('Erreur mise à jour statut:', error);
-        this.snackBar.open('❌ Erreur lors de la mise à jour du statut', 'Fermer', { duration: 3000 });
+        task.statuts = oldStatus;
+        this.snackBar.open('❌ Erreur lors du déplacement', 'Fermer', { duration: 3000 });
       }
     });
   }
@@ -502,7 +586,6 @@ trackTaskById(index: number, task: Task): number {
   // =========================
   // UTILS
   // =========================
- 
 
   getTaskStatusLabel(status: string): string {
     const labels: Record<string, string> = {
@@ -570,5 +653,13 @@ trackTaskById(index: number, task: Task): number {
   refresh(): void {
     this.loadData();
     this.loadUsers();
+  }
+  
+  trackProjectById(index: number, project: Project): number {
+    return project.id;
+  }
+
+  trackTaskById(index: number, task: Task): number {
+    return task.id;
   }
 }

@@ -1,84 +1,343 @@
 // src/app/pages/manager/project-form/project-form.scss
+
+// Variables
+$primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+$bg-dark: #0f172a;
+$bg-card: #1e293b;
+$border-light: rgba(255, 255, 255, 0.08);
+$text-primary: #f1f5f9;
+$text-secondary: #94a3b8;
+$success: #10b981;
+$warning: #f59e0b;
+$danger: #ef4444;
+$info: #3b82f6;
+
 .project-form-container {
-  padding: 20px;
+  background: $bg-card;
+  border-radius: 28px;
+  padding: 28px;
   min-width: 550px;
   max-width: 750px;
-  background: #1a1a2e;
-  border-radius: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border: 1px solid $border-light;
+  animation: fadeIn 0.3s ease-out;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
 }
 
 .form-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid $border-light;
 
   h2 {
-    color: white;
+    color: $text-primary;
     margin: 0;
     font-size: 1.5rem;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: $primary-gradient;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
   .close-btn {
-    color: rgba(255, 255, 255, 0.6);
+    color: $text-secondary;
+    transition: all 0.2s ease;
+
+    &:hover {
+      color: $danger;
+      background: rgba(239, 68, 68, 0.1);
+      transform: rotate(90deg);
+    }
   }
 }
 
 .form-body {
   .full-width {
     width: 100%;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
   }
 
   .form-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  // Style pour le textarea
+  textarea {
+    resize: vertical;
+    min-height: 100px;
+    font-family: inherit;
   }
 }
 
-.status-option {
-  &.planned { color: #3b82f6; }
-  &.in_progress { color: #f59e0b; }
-  &.completed { color: #22c55e; }
-  &.cancelled { color: #ef4444; }
+// Style des champs de formulaire Material personnalisés
+::ng-deep .mat-mdc-form-field {
+  width: 100%;
+
+  // Label flottant
+  .mdc-floating-label {
+    color: $text-secondary !important;
+    font-weight: 500;
+  }
+
+  // Champ de texte
+  .mdc-text-field--outlined {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 12px;
+
+    .mdc-notched-outline__leading,
+    .mdc-notched-outline__notch,
+    .mdc-notched-outline__trailing {
+      border-color: $border-light !important;
+      border-width: 1px !important;
+    }
+
+    &:hover .mdc-notched-outline__leading,
+    &:hover .mdc-notched-outline__notch,
+    &:hover .mdc-notched-outline__trailing {
+      border-color: rgba(102, 126, 234, 0.5) !important;
+    }
+
+    &.mdc-text-field--focused .mdc-notched-outline__leading,
+    &.mdc-text-field--focused .mdc-notched-outline__notch,
+    &.mdc-text-field--focused .mdc-notched-outline__trailing {
+      border-color: #667eea !important;
+      border-width: 2px !important;
+    }
+  }
+
+  // Input text
+  .mdc-text-field__input {
+    color: $text-primary !important;
+    caret-color: #667eea !important;
+    padding: 16px !important;
+    font-size: 14px;
+
+    &::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+  }
+
+  // Icônes préfixes et suffixes
+  .mat-icon {
+    color: $text-secondary;
+  }
+
+  // Messages d'erreur
+  .mat-mdc-form-field-error {
+    color: $danger;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  // Hint text
+  .mat-mdc-form-field-hint {
+    color: $text-secondary;
+    font-size: 11px;
+  }
 }
 
+// Style pour les selects
+::ng-deep .mat-mdc-select {
+  .mat-mdc-select-value-text {
+    color: $text-primary;
+  }
+
+  .mat-mdc-select-arrow {
+    color: $text-secondary;
+  }
+
+  .mat-mdc-select-placeholder {
+    color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+// Style pour les datepickers
+::ng-deep .mat-datepicker-toggle {
+  color: $text-secondary;
+
+  &:hover {
+    color: #667eea;
+  }
+}
+
+// Options de statut
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+
+  &::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  &.planned {
+    color: $info;
+    &::before { background: $info; }
+  }
+
+  &.in_progress {
+    color: $warning;
+    &::before { background: $warning; }
+  }
+
+  &.completed {
+    color: $success;
+    &::before { background: $success; }
+  }
+
+  &.cancelled {
+    color: $danger;
+    &::before { background: $danger; }
+  }
+}
+
+// Pied de formulaire
 .form-footer {
   display: flex;
   justify-content: flex-end;
   gap: 16px;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid $border-light;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    border-radius: 40px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
 
   .cancel-btn {
-    color: rgba(255, 255, 255, 0.7);
+    background: transparent;
+    color: $text-secondary;
+    border: 1px solid $border-light;
+
+    &:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.05);
+      color: $text-primary;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
   }
 
   .submit-btn {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: $primary-gradient;
     color: white;
-    min-width: 120px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    mat-spinner {
+      margin-right: 8px;
+    }
   }
 }
 
-::ng-deep .mat-mdc-form-field {
-  .mdc-text-field--outlined .mdc-notched-outline__leading,
-  .mdc-text-field--outlined .mdc-notched-outline__notch,
-  .mdc-text-field--outlined .mdc-notched-outline__trailing {
-    border-color: rgba(255, 255, 255, 0.2);
+// Scrollbar personnalisée
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: $border-light;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 3px;
+
+  &:hover {
+    background: #764ba2;
+  }
+}
+
+// Responsive
+@media (max-width: 640px) {
+  .project-form-container {
+    padding: 20px;
+    min-width: auto;
+    border-radius: 20px;
   }
 
-  .mdc-floating-label {
-    color: rgba(255, 255, 255, 0.6);
+  .form-body .form-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
-  .mdc-text-field__input {
-    color: white;
+  .form-footer {
+    flex-direction: column-reverse;
+
+    button {
+      width: 100%;
+      justify-content: center;
+    }
   }
+}
+
+// Animation pour les champs en erreur
+::ng-deep .mat-mdc-form-field.ng-invalid.ng-touched {
+  .mdc-text-field--outlined {
+    .mdc-notched-outline__leading,
+    .mdc-notched-outline__notch,
+    .mdc-notched-outline__trailing {
+      border-color: $danger !important;
+    }
+  }
+}
+
+// Effet de focus global
+::ng-deep *:focus {
+  outline: none;
+}
+
+// Spinner dans le bouton
+::ng-deep .mat-mdc-progress-spinner {
+  --mdc-circular-progress-active-indicator-color: white;
 }

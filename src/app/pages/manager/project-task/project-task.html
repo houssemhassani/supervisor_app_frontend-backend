@@ -1,22 +1,31 @@
 <div class="ptm-dashboard">
 
-  <!-- BLOC DE DEBUG TEMPORAIRE - À SUPPRIMER APRÈS -->
-  <div *ngIf="!isLoading" style="background: #f0f0f0; padding: 10px; margin: 10px; border: 1px solid red; border-radius: 5px;">
-    <strong>🔍 DEBUG:</strong>
-    <p>📊 isLoading: {{ isLoading }}</p>
-    <p>📦 Nombre de projets: {{ projects.length }}</p>
-    <p *ngIf="projects.length > 0">🏷️ Premier projet: {{ projects[0]?.name }}</p>
-    <p *ngIf="projects.length === 0">⚠️ Aucun projet trouvé</p>
-    <p>📋 Nombre de tâches totales: {{ tasks.length }}</p>
-    <p *ngIf="projects.length > 0">📋 Tâches du premier projet: {{ projects[0]?.tasks?.length || 0 }}</p>
-  </div>
+ 
 
   <!-- HEADER -->
   <header class="ptm-header">
-    <h1>Project & Task Manager</h1>
-    <button class="btn-add-project" (click)="openProjectForm()">
-      <mat-icon>add_circle_outline</mat-icon> Add Project
-    </button>
+    <div class="header-title">
+      <h1 *ngIf="viewMode === 'list'">Project & Task Manager</h1>
+      <h1 *ngIf="viewMode === 'kanban' && selectedProjectForKanban">
+        <button class="back-button" (click)="backToList()" matTooltip="Retour à la liste">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+        {{ selectedProjectForKanban.name }} - Vue Kanban
+      </h1>
+    </div>
+    <div class="header-actions">
+      <div class="view-toggle" *ngIf="viewMode === 'list'">
+        <button [class.active]="viewMode === 'list'" (click)="setViewMode('list')" matTooltip="Vue Liste">
+          <mat-icon>view_list</mat-icon>
+        </button>
+        <button [class.active]="viewMode === 'kanban'" (click)="setViewMode('kanban')" matTooltip="Vue Kanban" [disabled]="projects.length === 0">
+          <mat-icon>view_kanban</mat-icon>
+        </button>
+      </div>
+      <button class="btn-add-project" (click)="openProjectForm()">
+        <mat-icon>add_circle_outline</mat-icon> Add Project
+      </button>
+    </div>
   </header>
 
   <!-- LOADING STATE -->
@@ -25,121 +34,204 @@
     <p>Chargement des projets...</p>
   </div>
 
-  <!-- PROJECTS GRID -->
-  <section class="projects-grid" *ngIf="!isLoading">
-    <!-- Message si pas de projets -->
-    <div class="no-projects-message" *ngIf="projects.length === 0">
-      <mat-icon>folder_open</mat-icon>
-      <p>Aucun projet trouvé</p>
-      <button class="btn-add-project" (click)="openProjectForm()">
-        <mat-icon>add_circle_outline</mat-icon> Create your first project
-      </button>
-    </div>
+  <!-- ============================================ -->
+  <!-- VUE LISTE -->
+  <!-- ============================================ -->
+  <ng-container *ngIf="!isLoading && viewMode === 'list'">
+    <section class="projects-grid">
+      <!-- Message si pas de projets -->
+      <div class="no-projects-message" *ngIf="projects.length === 0">
+        <mat-icon>folder_open</mat-icon>
+        <p>Aucun projet trouvé</p>
+        <button class="btn-add-project" (click)="openProjectForm()">
+          <mat-icon>add_circle_outline</mat-icon> Create your first project
+        </button>
+      </div>
 
-    <!-- Affichage des projets -->
-    <div class="project-card" *ngFor="let project of projects; trackBy: trackProjectById">
-      <div class="card-top">
-        <h2>{{ project.name }}</h2>
-        <div class="card-actions">
-          <button (click)="openProjectForm(project)" matTooltip="Edit Project">
-            <mat-icon>edit</mat-icon>
+      <!-- Affichage des projets -->
+      <div class="project-card" *ngFor="let project of projects; trackBy: trackProjectById">
+        <div class="card-top">
+          <h2>{{ project.name }}</h2>
+          <div class="card-actions">
+            <button (click)="selectProjectForKanban(project)" matTooltip="Vue Kanban" class="kanban-view-btn">
+              <mat-icon>view_kanban</mat-icon>
+            </button>
+            <button (click)="openProjectForm(project)" matTooltip="Edit Project">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button (click)="openConfirm(project, 'deleteProject')" matTooltip="Delete Project">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- Description - CORRECTION ICI : utilisation de getTextFromBlocks -->
+        <p class="project-desc">{{ getTextFromBlocks(project.description) || 'No description' }}</p>
+
+        <!-- Informations créateur -->
+        <div class="project-creator" *ngIf="project.creator">
+          <mat-icon>person_outline</mat-icon>
+          <span>Créé par: {{ project.creator?.username || 'Inconnu' }}</span>
+        </div>
+
+        <!-- Informations équipe -->
+        <div class="project-team" *ngIf="project.users && project.users.length > 0">
+          <mat-icon>group</mat-icon>
+          <span>Équipe: {{ project.users.length }} membre(s)</span>
+        </div>
+
+        <!-- PROJECT INFO -->
+        <div class="project-info">
+          <span class="status-badge" [ngClass]="(project.statuts || 'PLANNED').toLowerCase()">
+            <mat-icon>{{ getStatusIcon(project.statuts || 'PLANNED') }}</mat-icon>
+            {{ getProjectStatusLabel(project.statuts || 'PLANNED') }}
+          </span>
+          <div class="dates">
+            <span><mat-icon>event</mat-icon> {{ formatDate(project.start_date) }}</span>
+            <span><mat-icon>event</mat-icon> {{ formatDate(project.end_date) }}</span>
+          </div>
+        </div>
+
+        <!-- TASKS -->
+        <div class="tasks-section">
+          <div class="tasks-header">
+            <h3>Tasks</h3>
+            <span class="task-count">{{ project.tasks?.length || 0 }} tâche(s)</span>
+          </div>
+          
+          <div class="tasks-list">
+            <div class="task-card" *ngFor="let task of project.tasks; trackBy: trackTaskById">
+              <div class="task-left">
+                <div class="task-title">
+                  <mat-icon class="task-icon" [ngClass]="(task.statuts || 'TODO').toLowerCase()">
+                    {{ getStatusIcon(task.statuts || 'TODO') }}
+                  </mat-icon>
+                  <h4>{{ task.title }}</h4>
+                </div>
+                <p class="task-desc">{{ getTextFromBlocks(task.description) | slice:0:100 }}{{ (getTextFromBlocks(task.description).length || 0) > 100 ? '...' : '' }}</p>
+                <div class="task-meta">
+                  <span class="assigned-to">
+                    <mat-icon>person</mat-icon>
+                    {{ task.assigned_to?.username || 'Non assigné' }}
+                  </span>
+                  <span class="due-date" [class.overdue]="isOverdue(task.due_date) && task.statuts !== 'DONE'">
+                    <mat-icon>calendar_today</mat-icon>
+                    {{ formatDate(task.due_date) }}
+                  </span>
+                </div>
+              </div>
+              <div class="task-right">
+                <span class="priority-badge" [ngClass]="(task.priority || 'MEDIUM').toLowerCase()">
+                  {{ getTaskPriorityLabel(task.priority || 'MEDIUM') }}
+                </span>
+                <span class="status-badge task-status" [ngClass]="(task.statuts || 'TODO').toLowerCase()">
+                  {{ getTaskStatusLabel(task.statuts || 'TODO') }}
+                </span>
+                <div class="task-actions">
+                  <button (click)="openTaskForm(project, task)" matTooltip="Edit Task">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete Task">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                  <button (click)="updateTaskStatus(task, getNextStatus(task.statuts || 'TODO'))" matTooltip="Change Status">
+                    <mat-icon>sync</mat-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="empty-tasks" *ngIf="!project.tasks || project.tasks.length === 0">
+              <mat-icon>assignment</mat-icon>
+              <p>Aucune tâche pour ce projet</p>
+            </div>
+          </div>
+          
+          <button class="btn-add-task" (click)="openTaskForm(project)">
+            <mat-icon>add_circle</mat-icon> Add Task
           </button>
-          <button (click)="openConfirm(project, 'deleteProject')" matTooltip="Delete Project">
-            <mat-icon>delete</mat-icon>
-          </button>
         </div>
       </div>
+    </section>
+  </ng-container>
 
-      <!-- Description -->
-      <p class="project-desc">{{ project.description || 'No description' }}</p>
-
-      <!-- Informations créateur -->
-      <div class="project-creator" *ngIf="project.creator">
-        <mat-icon>person_outline</mat-icon>
-        <span>Créé par: {{ project.creator?.username || project.creator?.firstName || project.creator?.email || 'Inconnu' }}</span>
-      </div>
-
-      <!-- Informations équipe -->
-      <div class="project-team" *ngIf="project.users && project.users.length > 0">
-        <mat-icon>group</mat-icon>
-        <span>Équipe: {{ project.users.length }} membre(s)</span>
-      </div>
-
-      <!-- PROJECT INFO -->
-      <div class="project-info">
-        <span class="status-badge" [ngClass]="(project.statuts || 'PLANNED').toLowerCase()">
-          <mat-icon>{{ getStatusIcon(project.statuts || 'PLANNED') }}</mat-icon>
-          {{ getProjectStatusLabel(project.statuts || 'PLANNED') }}
-        </span>
-        <div class="dates">
-          <span><mat-icon>event</mat-icon> {{ formatDate(project.start_date) }}</span>
-          <span><mat-icon>event</mat-icon> {{ formatDate(project.end_date) }}</span>
-        </div>
-      </div>
-
-      <!-- TASKS -->
-      <div class="tasks-section">
-        <div class="tasks-header">
-          <h3>Tasks</h3>
-          <span class="task-count">{{ project.tasks?.length || 0 }} tâche(s)</span>
-        </div>
-        
-        <div class="tasks-list">
-          <!-- Affichage des tâches - CORRECTION ICI : utilisation directe de project.tasks -->
-          <div class="task-card" *ngFor="let task of project.tasks; trackBy: trackTaskById">
-            <div class="task-left">
-              <div class="task-title">
-                <mat-icon class="task-icon" [ngClass]="(task.statuts || 'TODO').toLowerCase()">
-                  {{ getStatusIcon(task.statuts || 'TODO') }}
-                </mat-icon>
+  <!-- ============================================ -->
+  <!-- VUE KANBAN -->
+  <!-- ============================================ -->
+  <ng-container *ngIf="!isLoading && viewMode === 'kanban' && selectedProjectForKanban">
+    <div class="kanban-board">
+      <div class="kanban-columns">
+        <div class="kanban-column" *ngFor="let column of kanbanColumns">
+          <div class="column-header" [style.border-bottom-color]="column.color">
+            <div class="column-title">
+              <mat-icon [style.color]="column.color">{{ column.icon }}</mat-icon>
+              <h3>{{ column.title }}</h3>
+              <span class="task-count-badge">{{ getTasksByStatus(selectedProjectForKanban.id, column.status).length }}</span>
+            </div>
+          </div>
+          <div class="column-tasks" 
+               [class.empty]="getTasksByStatus(selectedProjectForKanban.id, column.status).length === 0">
+            <div class="kanban-task-card" 
+                 *ngFor="let task of getTasksByStatus(selectedProjectForKanban.id, column.status)"
+                 [class.high-priority]="task.priority === 'HIGH'"
+                 [class.medium-priority]="task.priority === 'MEDIUM'"
+                 [class.low-priority]="task.priority === 'LOW'">
+              <div class="task-header">
                 <h4>{{ task.title }}</h4>
+                <div class="task-actions-kanban">
+                  <button (click)="openTaskForm(selectedProjectForKanban, task)" matTooltip="Edit">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
               </div>
-              <p class="task-desc">{{ (task.description || '') | slice:0:100 }}{{ (task.description?.length || 0) > 100 ? '...' : '' }}</p>
-              <div class="task-meta">
-                <span class="assigned-to">
-                  <mat-icon>person</mat-icon>
-                  {{ task.assigned_to?.firstName || task.assigned_to?.firstname || task.assigned_to?.username || 'Non assigné' }}
-                </span>
-                <span class="due-date" [class.overdue]="isOverdue(task.due_date) && task.statuts !== 'DONE'">
-                  <mat-icon>calendar_today</mat-icon>
-                  {{ formatDate(task.due_date) }}
-                </span>
+              <p class="task-description">{{ getTextFromBlocks(task.description) | slice:0:80 }}{{ (getTextFromBlocks(task.description).length || 0) > 80 ? '...' : '' }}</p>
+              <div class="task-footer">
+                <div class="task-priority">
+                  <span class="priority-dot" [class]="(task.priority || 'MEDIUM').toLowerCase()"></span>
+                  <span>{{ getTaskPriorityLabel(task.priority || 'MEDIUM') }}</span>
+                </div>
+                <div class="task-assignee" *ngIf="task.assigned_to">
+                  <div class="assignee-avatar">
+                    {{ (task.assigned_to.username?.charAt(0) || 'U') | uppercase }}
+                  </div>
+                  <span class="assignee-name">{{ task.assigned_to.username }}</span>
+                </div>
+              </div>
+              <div class="task-date" [class.overdue]="isOverdue(task.due_date) && task.statuts !== 'DONE'">
+                <mat-icon>event</mat-icon>
+                <span>{{ formatDate(task.due_date) }}</span>
+              </div>
+              <div class="task-status-actions">
+                <button *ngIf="task.statuts !== 'TODO'" 
+                        (click)="updateTaskStatus(task, 'TODO')" 
+                        class="status-move-btn" matTooltip="Déplacer vers À faire">
+                  <mat-icon>arrow_left</mat-icon>
+                </button>
+                <button *ngIf="task.statuts !== 'DONE'" 
+                        (click)="updateTaskStatus(task, getNextStatus(task.statuts))" 
+                        class="status-move-btn" matTooltip="Avancer">
+                  <mat-icon>arrow_right</mat-icon>
+                </button>
               </div>
             </div>
-            <div class="task-right">
-              <span class="priority-badge" [ngClass]="(task.priority || 'MEDIUM').toLowerCase()">
-                {{ getTaskPriorityLabel(task.priority || 'MEDIUM') }}
-              </span>
-              <span class="status-badge task-status" [ngClass]="(task.statuts || 'TODO').toLowerCase()">
-                {{ getTaskStatusLabel(task.statuts || 'TODO') }}
-              </span>
-              <div class="task-actions">
-                <button (click)="openTaskForm(project, task)" matTooltip="Edit Task">
-                  <mat-icon>edit</mat-icon>
-                </button>
-                <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete Task">
-                  <mat-icon>delete</mat-icon>
-                </button>
-                <button (click)="updateTaskStatus(task, getNextStatus(task.statuts || 'TODO'))" matTooltip="Change Status">
-                  <mat-icon>sync</mat-icon>
-                </button>
-              </div>
+            <div class="empty-column-message" *ngIf="getTasksByStatus(selectedProjectForKanban.id, column.status).length === 0">
+              <mat-icon>inbox</mat-icon>
+              <p>Aucune tâche</p>
             </div>
-          </div>
-
-          <!-- EMPTY TASKS -->
-          <div class="empty-tasks" *ngIf="!project.tasks || project.tasks.length === 0">
-            <mat-icon>assignment</mat-icon>
-            <p>Aucune tâche pour ce projet</p>
           </div>
         </div>
-        
-        <button class="btn-add-task" (click)="openTaskForm(project)">
-          <mat-icon>add_circle</mat-icon> Add Task
+      </div>
+      <div class="kanban-footer">
+        <button class="btn-add-task-kanban" (click)="openTaskForm(selectedProjectForKanban)">
+          <mat-icon>add</mat-icon>
+          Nouvelle tâche
         </button>
       </div>
     </div>
-  </section>
+  </ng-container>
 
   <!-- MODAL : Project Form -->
   <div class="modal-backdrop" *ngIf="showProjectForm">
@@ -226,8 +318,7 @@
             <select [(ngModel)]="editingTask!.assigned_to" name="assigned">
               <option [ngValue]="null">Non assigné</option>
               <option *ngFor="let user of users" [ngValue]="user">
-                {{ user.firstName || user.firstname || user.username }} 
-                {{ user.lastName || user.lastname || '' }}
+                {{ user.username }}
               </option>
             </select>
           </div>
