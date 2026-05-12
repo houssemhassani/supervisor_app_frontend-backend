@@ -993,23 +993,38 @@ exportEmployeePDF(employeeId: number, month: string): Observable<Blob> {
   // PROJECTS - CRUD COMPLET
   // ============================================
 
-  getAllProjects(): Observable<ApiResponse<Project[]>> {
-    // Version simplifiée pour Strapi v5
-    const url = `${this.apiUrl}/projects?sort=createdAt:desc&populate=users&populate=creator&populate=tasks`;
-    
-    console.log('📡 [Manager] GET tous les projets');
-    const headers = this.getHeaders();
-    
-    return this.http.get<ApiResponse<Project[]>>(url, { headers }).pipe(
-      tap(response => {
-        console.log(`✅ ${response.data?.length || 0} projets trouvés`);
-        // Vérifier si les tâches sont présentes
-        if (response.data && response.data.length > 0) {
-          console.log('📋 Tâches du premier projet:', response.data[0].tasks);
-        }
-      }),
-      catchError(error => this.handleError(error, 'Erreur lors du chargement des projets'))
-    );
+getAllProjects(): Observable<ApiResponse<Project[]>> {
+  const url = `${this.apiUrl}/projects?sort=createdAt:desc&populate=users&populate=creator&populate=tasks`;
+  
+  console.log('📡 [Manager] GET tous les projets');
+  const headers = this.getHeaders();
+  
+  return this.http.get<any>(url, { headers }).pipe(
+    map((response: any) => {
+      console.log('📦 Réponse API brute:', response);
+      
+      let projects: any[] = [];
+      
+      if (response.data && Array.isArray(response.data)) {
+        projects = response.data;
+      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        projects = response.data.data;
+      }
+      
+      // NE RIEN TRANSFORMER - GARDER TOUTES LES PROPS
+      // Supprimez tout .map qui pourrait supprimer les tâches
+      
+      console.log('✅ Projets retournés:', projects.map((p: any) => ({ 
+        name: p.name, 
+        tasksCount: p.tasks?.length,
+        aDesTaches: !!p.tasks
+      })));
+      
+      // Retourner les données TELLES QUELLES
+      return { data: projects };
+    }),
+    catchError(error => this.handleError(error, 'Erreur lors du chargement des projets'))
+  );
 }
 
   getMyProjects(): Observable<ApiResponse<Project[]>> {

@@ -8,6 +8,9 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ManagerService, Project, Task, User } from '../../../services/manager';
 import { forkJoin } from 'rxjs';
 
+// Définition du type pour le mode d'affichage
+type ViewMode = 'list' | 'kanban';
+
 @Component({
   selector: 'app-project-task',
   standalone: true,
@@ -28,7 +31,7 @@ export class ProjectTaskComponent implements OnInit {
   showConfirmModal = false;
   
   // View mode: 'list' ou 'kanban'
-  viewMode: 'list' | 'kanban' = 'list';
+  viewMode: ViewMode = 'list';
   selectedProjectForKanban: Project | null = null;
 
   editingProject: Project | null = null;
@@ -65,9 +68,6 @@ export class ProjectTaskComponent implements OnInit {
   // UTILITAIRES
   // =========================
 
-  /**
-   * Extrait le texte d'un bloc Strapi (type 'blocks')
-   */
   getTextFromBlocks(blocks: any): string {
     if (!blocks) return '';
     if (typeof blocks === 'string') return blocks;
@@ -82,26 +82,6 @@ export class ProjectTaskComponent implements OnInit {
     return '';
   }
 
-  /**
-   * Extrait le nom d'un utilisateur depuis un objet
-   */
-  getUserName(user: any): string {
-    if (!user) return 'Inconnu';
-    return user.username || user.email || 'Inconnu';
-  }
-
-  /**
-   * Extrait le nom complet d'un utilisateur
-   */
-  getUserFullName(user: any): string {
-    if (!user) return 'Non assigné';
-    if (user.username) return user.username;
-    return 'Non assigné';
-  }
-
-  /**
-   * Élimine les doublons d'un tableau par propriété ID
-   */
   private uniqueBy<T extends { id: number }>(array: T[]): T[] {
     const seen = new Set<number>();
     return array.filter(item => {
@@ -112,10 +92,18 @@ export class ProjectTaskComponent implements OnInit {
   }
 
   // =========================
-  // VIEW MODE
+  // VIEW MODE - Méthodes utilitaires
   // =========================
-  
-  setViewMode(mode: 'list' | 'kanban'): void {
+
+  isListMode(): boolean {
+    return this.viewMode === 'list';
+  }
+
+  isKanbanMode(): boolean {
+    return this.viewMode === 'kanban';
+  }
+
+  setViewMode(mode: ViewMode): void {
     this.viewMode = mode;
     if (mode === 'list') {
       this.selectedProjectForKanban = null;
@@ -124,9 +112,14 @@ export class ProjectTaskComponent implements OnInit {
   }
   
   selectProjectForKanban(project: Project): void {
-    console.log('📋 Projet sélectionné pour Kanban:', project);
-    console.log('📋 Tâches du projet:', project.tasks);
-    this.selectedProjectForKanban = project;
+    const fullProject = this.projects.find(p => p.id === project.id);
+    if (fullProject) {
+      this.selectedProjectForKanban = fullProject;
+      console.log('📋 Projet sélectionné:', this.selectedProjectForKanban.name);
+      console.log('📊 Nombre de tâches:', this.selectedProjectForKanban.tasks?.length || 0);
+    } else {
+      this.selectedProjectForKanban = project;
+    }
     this.viewMode = 'kanban';
     this.cdr.detectChanges();
   }
@@ -137,47 +130,18 @@ export class ProjectTaskComponent implements OnInit {
     this.cdr.detectChanges();
   }
   
-  // Récupère les tâches d'un projet par statut pour le Kanban
   getTasksByStatus(projectId: number, status: string): Task[] {
-    console.log(`🔍 Recherche tâches avec statut ${status} pour projet ${projectId}`);
-    
     const project = this.projects.find(p => p.id === projectId);
-    if (!project) {
-      console.log('❌ Projet non trouvé');
-      return [];
+    if (project && project.tasks) {
+      return project.tasks.filter(task => task.statuts === status);
     }
-    
-    console.log('📋 Projet trouvé:', project.name);
-    console.log('📋 Tâches du projet:', project.tasks);
-    
-    if (project && project.tasks && project.tasks.length > 0) {
-      const filtered = project.tasks.filter(task => task.statuts === status);
-      console.log(`✅ ${filtered.length} tâches trouvées pour le statut ${status}`);
-      return filtered;
-    }
-    
-    // Fallback: filtrer depuis this.tasks
-    const filteredFromGlobal = this.tasks.filter(task => task.project?.id === projectId && task.statuts === status);
-    console.log(`✅ ${filteredFromGlobal.length} tâches trouvées (fallback)`);
-    return filteredFromGlobal;
-  }
-  
-  // Récupère toutes les tâches d'un projet
-  getProjectTasks(projectId: number): Task[] {
-    const project = this.projects.find(p => p.id === projectId);
-    if (project && project.tasks && project.tasks.length > 0) {
-      return project.tasks;
-    }
-    const filteredTasks = this.tasks.filter(task => task.project?.id === projectId);
-    if (filteredTasks.length > 0 && project) {
-      project.tasks = filteredTasks;
-    }
-    return filteredTasks;
+    return [];
   }
 
   // =========================
-  // LOAD DATA
+  // LOAD DATA - VERSION CORRIGÉE
   // =========================
+
   loadData(): void {
     this.isLoading = true;
     this.cdr.detectChanges();
@@ -187,8 +151,8 @@ export class ProjectTaskComponent implements OnInit {
       tasks: this.managerService.getAllTasks()
     }).subscribe({
       next: (result: any) => {
-        console.log('📦 Réponse complète projets:', result.projects);
-        console.log('📦 Réponse complète tâches:', result.tasks);
+        console.log('📦 Réponse projets:', result.projects);
+        console.log('📦 Réponse tâches:', result.tasks);
         
         // Traitement des projets
         let rawProjects = [];
@@ -203,6 +167,7 @@ export class ProjectTaskComponent implements OnInit {
         }
         
         this.projects = rawProjects.map((item: any) => {
+          // Format Strapi v4 (avec attributes)
           if (item.attributes) {
             return {
               id: item.id,
@@ -216,6 +181,7 @@ export class ProjectTaskComponent implements OnInit {
               tasks: item.attributes.tasks || []
             };
           }
+          // Format Strapi v5 (direct)
           return {
             id: item.id,
             name: item.name,
@@ -229,19 +195,8 @@ export class ProjectTaskComponent implements OnInit {
           };
         });
         
-        // Éliminer les doublons de projets
+        // Éliminer les doublons
         this.projects = this.uniqueBy(this.projects);
-        console.log('✅ Projets après transformation et dédoublonnage:', this.projects);
-        
-        // Afficher les tâches de chaque projet
-        this.projects.forEach(project => {
-          console.log(`📋 Projet "${project.name}" a ${project.tasks?.length || 0} tâches`);
-          if (project.tasks && project.tasks.length > 0) {
-            project.tasks.forEach(task => {
-              console.log(`   - ${task.title} : statut = "${task.statuts}"`);
-            });
-          }
-        });
         
         // Traitement des tâches
         let rawTasks = [];
@@ -282,34 +237,32 @@ export class ProjectTaskComponent implements OnInit {
         
         // Éliminer les doublons de tâches
         this.tasks = this.uniqueBy(this.tasks);
-        console.log(`✅ ${this.tasks.length} tâches chargées`);
         
-        // Association manuelle si nécessaire
+        // SI LES TÂCHES NE SONT PAS DANS LES PROJETS, ON LES ASSOCIE
         if (this.projects.length > 0 && this.tasks.length > 0) {
           const hasTasksInProjects = this.projects.some(p => p.tasks && p.tasks.length > 0);
           if (!hasTasksInProjects) {
-            console.log('🔄 Association manuelle des tâches aux projets...');
+            console.log('🔄 Association des tâches aux projets...');
             this.projects = this.projects.map(project => {
-              const projectTasks = this.tasks.filter((task: Task) => task.project?.id === project.id);
+              const projectTasks = this.tasks.filter(task => task.project?.id === project.id);
               return { ...project, tasks: projectTasks };
             });
-            console.log('✅ Tâches associées manuellement');
           }
         }
+        
+        console.log('✅ Résultat final:');
+        this.projects.forEach(p => {
+          console.log(`   ${p.name}: ${p.tasks?.length || 0} tâches`);
+        });
         
         this.isLoading = false;
         this.cdr.detectChanges();
       },
       error: (error) => {
-        console.error('❌ Erreur globale:', error);
+        console.error('❌ Erreur:', error);
         this.isLoading = false;
         this.cdr.detectChanges();
-        
-        let errorMessage = 'Erreur lors du chargement des données';
-        if (error.status === 401) {
-          errorMessage = 'Erreur d\'authentification. Vérifiez les permissions dans Strapi.';
-        }
-        this.snackBar.open(errorMessage, 'Fermer', { duration: 4000 });
+        this.snackBar.open('Erreur lors du chargement des données', 'Fermer', { duration: 4000 });
       }
     });
   }
@@ -318,18 +271,16 @@ export class ProjectTaskComponent implements OnInit {
     this.managerService.getUsers().subscribe({
       next: (response) => {
         this.users = response.data || [];
-        console.log(`✅ ${this.users.length} utilisateurs chargés`);
         this.cdr.detectChanges();
       },
-      error: (error) => {
-        console.error('Erreur chargement utilisateurs:', error);
-      }
+      error: (error) => console.error('Erreur chargement utilisateurs:', error)
     });
   }
 
   // =========================
   // PROJECT CRUD
   // =========================
+
   openProjectForm(project?: Project): void {
     if (project) {
       this.editingProject = { ...project };
@@ -378,8 +329,8 @@ export class ProjectTaskComponent implements OnInit {
           this.loadData();
         },
         error: (error) => {
-          console.error('Erreur création projet:', error);
-          this.snackBar.open('❌ Erreur lors de la création du projet', 'Fermer', { duration: 3000 });
+          console.error(error);
+          this.snackBar.open('❌ Erreur lors de la création', 'Fermer', { duration: 3000 });
         }
       });
     } else {
@@ -390,8 +341,8 @@ export class ProjectTaskComponent implements OnInit {
           this.loadData();
         },
         error: (error) => {
-          console.error('Erreur modification projet:', error);
-          this.snackBar.open('❌ Erreur lors de la modification du projet', 'Fermer', { duration: 3000 });
+          console.error(error);
+          this.snackBar.open('❌ Erreur lors de la modification', 'Fermer', { duration: 3000 });
         }
       });
     }
@@ -400,12 +351,12 @@ export class ProjectTaskComponent implements OnInit {
   deleteProject(project: Project): void {
     this.managerService.deleteProject(project.id).subscribe({
       next: () => {
-        this.snackBar.open('🗑️ Projet supprimé avec succès', 'Fermer', { duration: 3000 });
+        this.snackBar.open('🗑️ Projet supprimé', 'Fermer', { duration: 3000 });
         this.loadData();
       },
       error: (error) => {
-        console.error('Erreur suppression projet:', error);
-        this.snackBar.open('❌ Erreur lors de la suppression du projet', 'Fermer', { duration: 3000 });
+        console.error(error);
+        this.snackBar.open('❌ Erreur lors de la suppression', 'Fermer', { duration: 3000 });
       }
     });
   }
@@ -413,6 +364,7 @@ export class ProjectTaskComponent implements OnInit {
   // =========================
   // TASK CRUD
   // =========================
+
   openTaskForm(project: Project, task?: Task): void {
     this.selectedProject = project;
     
@@ -464,25 +416,25 @@ export class ProjectTaskComponent implements OnInit {
     if (this.editingTask.id === 0) {
       this.managerService.createTask(taskData).subscribe({
         next: () => {
-          this.snackBar.open('✅ Tâche créée avec succès', 'Fermer', { duration: 3000 });
+          this.snackBar.open('✅ Tâche créée', 'Fermer', { duration: 3000 });
           this.closeTaskForm();
           this.loadData();
         },
         error: (error) => {
-          console.error('Erreur création tâche:', error);
-          this.snackBar.open('❌ Erreur lors de la création de la tâche', 'Fermer', { duration: 3000 });
+          console.error(error);
+          this.snackBar.open('❌ Erreur lors de la création', 'Fermer', { duration: 3000 });
         }
       });
     } else {
       this.managerService.updateTask(this.editingTask.id, taskData).subscribe({
         next: () => {
-          this.snackBar.open('✅ Tâche modifiée avec succès', 'Fermer', { duration: 3000 });
+          this.snackBar.open('✅ Tâche modifiée', 'Fermer', { duration: 3000 });
           this.closeTaskForm();
           this.loadData();
         },
         error: (error) => {
-          console.error('Erreur modification tâche:', error);
-          this.snackBar.open('❌ Erreur lors de la modification de la tâche', 'Fermer', { duration: 3000 });
+          console.error(error);
+          this.snackBar.open('❌ Erreur lors de la modification', 'Fermer', { duration: 3000 });
         }
       });
     }
@@ -491,12 +443,12 @@ export class ProjectTaskComponent implements OnInit {
   deleteTask(task: Task): void {
     this.managerService.deleteTask(task.id).subscribe({
       next: () => {
-        this.snackBar.open('🗑️ Tâche supprimée avec succès', 'Fermer', { duration: 3000 });
+        this.snackBar.open('🗑️ Tâche supprimée', 'Fermer', { duration: 3000 });
         this.loadData();
       },
       error: (error) => {
-        console.error('Erreur suppression tâche:', error);
-        this.snackBar.open('❌ Erreur lors de la suppression de la tâche', 'Fermer', { duration: 3000 });
+        console.error(error);
+        this.snackBar.open('❌ Erreur lors de la suppression', 'Fermer', { duration: 3000 });
       }
     });
   }
@@ -513,7 +465,7 @@ export class ProjectTaskComponent implements OnInit {
         this.loadData();
       },
       error: (error) => {
-        console.error('Erreur mise à jour statut:', error);
+        console.error(error);
         task.statuts = oldStatus;
         this.snackBar.open('❌ Erreur lors du déplacement', 'Fermer', { duration: 3000 });
       }
@@ -532,6 +484,7 @@ export class ProjectTaskComponent implements OnInit {
   // =========================
   // CONFIRMATION MODAL
   // =========================
+
   openConfirm(item: any, action: 'deleteProject' | 'deleteTask' | 'toggleTask'): void {
     this.selectedItem = item;
     this.confirmAction = action;
@@ -564,23 +517,18 @@ export class ProjectTaskComponent implements OnInit {
   getConfirmMessage(): string {
     if (!this.selectedItem) return '';
     if (this.confirmAction === 'deleteProject') {
-      return `Êtes-vous sûr de vouloir supprimer le projet "${(this.selectedItem as Project).name}" ? Cette action est irréversible.`;
+      return `Supprimer le projet "${(this.selectedItem as Project).name}" ?`;
     }
     if (this.confirmAction === 'deleteTask') {
-      return `Êtes-vous sûr de vouloir supprimer la tâche "${(this.selectedItem as Task).title}" ? Cette action est irréversible.`;
+      return `Supprimer la tâche "${(this.selectedItem as Task).title}" ?`;
     }
-    if (this.confirmAction === 'toggleTask') {
-      const task = this.selectedItem as Task;
-      const nextStatus = this.getNextStatus(task.statuts);
-      return `Voulez-vous changer le statut de la tâche "${task.title}" de "${this.getTaskStatusLabel(task.statuts)}" vers "${this.getTaskStatusLabel(nextStatus)}" ?`;
-    }
-    return '';
+    return 'Confirmer cette action ?';
   }
 
   getConfirmTitle(): string {
     if (this.confirmAction === 'deleteProject') return 'Supprimer le projet';
     if (this.confirmAction === 'deleteTask') return 'Supprimer la tâche';
-    return 'Changer le statut';
+    return 'Confirmer';
   }
 
   // =========================
@@ -627,15 +575,10 @@ export class ProjectTaskComponent implements OnInit {
     return icons[status] || 'help';
   }
 
-  getPriorityClass(priority: string): string {
-    return priority.toLowerCase();
-  }
-
   formatDate(dateString: string): string {
     if (!dateString) return '';
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('fr-FR');
+      return new Date(dateString).toLocaleDateString('fr-FR');
     } catch {
       return dateString;
     }

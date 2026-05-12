@@ -1,12 +1,10 @@
 <div class="ptm-dashboard">
 
- 
-
   <!-- HEADER -->
   <header class="ptm-header">
     <div class="header-title">
-      <h1 *ngIf="viewMode === 'list'">Project & Task Manager</h1>
-      <h1 *ngIf="viewMode === 'kanban' && selectedProjectForKanban">
+      <h1 *ngIf="isListMode()">Project & Task Manager</h1>
+      <h1 *ngIf="isKanbanMode() && selectedProjectForKanban">
         <button class="back-button" (click)="backToList()" matTooltip="Retour à la liste">
           <mat-icon>arrow_back</mat-icon>
         </button>
@@ -14,11 +12,11 @@
       </h1>
     </div>
     <div class="header-actions">
-      <div class="view-toggle" *ngIf="viewMode === 'list'">
-        <button [class.active]="viewMode === 'list'" (click)="setViewMode('list')" matTooltip="Vue Liste">
+      <div class="view-toggle" *ngIf="isListMode()">
+        <button [class.active]="isListMode()" (click)="setViewMode('list')" matTooltip="Vue Liste">
           <mat-icon>view_list</mat-icon>
         </button>
-        <button [class.active]="viewMode === 'kanban'" (click)="setViewMode('kanban')" matTooltip="Vue Kanban" [disabled]="projects.length === 0">
+        <button [class.active]="isKanbanMode()" (click)="setViewMode('kanban')" matTooltip="Vue Kanban" [disabled]="projects.length === 0">
           <mat-icon>view_kanban</mat-icon>
         </button>
       </div>
@@ -37,7 +35,7 @@
   <!-- ============================================ -->
   <!-- VUE LISTE -->
   <!-- ============================================ -->
-  <ng-container *ngIf="!isLoading && viewMode === 'list'">
+  <ng-container *ngIf="!isLoading && isListMode()">
     <section class="projects-grid">
       <!-- Message si pas de projets -->
       <div class="no-projects-message" *ngIf="projects.length === 0">
@@ -56,31 +54,27 @@
             <button (click)="selectProjectForKanban(project)" matTooltip="Vue Kanban" class="kanban-view-btn">
               <mat-icon>view_kanban</mat-icon>
             </button>
-            <button (click)="openProjectForm(project)" matTooltip="Edit Project">
+            <button (click)="openProjectForm(project)" matTooltip="Modifier le projet">
               <mat-icon>edit</mat-icon>
             </button>
-            <button (click)="openConfirm(project, 'deleteProject')" matTooltip="Delete Project">
+            <button (click)="openConfirm(project, 'deleteProject')" matTooltip="Supprimer le projet">
               <mat-icon>delete</mat-icon>
             </button>
           </div>
         </div>
 
-        <!-- Description - CORRECTION ICI : utilisation de getTextFromBlocks -->
-        <p class="project-desc">{{ getTextFromBlocks(project.description) || 'No description' }}</p>
+        <p class="project-desc">{{ getTextFromBlocks(project.description) || 'Aucune description' }}</p>
 
-        <!-- Informations créateur -->
         <div class="project-creator" *ngIf="project.creator">
           <mat-icon>person_outline</mat-icon>
-          <span>Créé par: {{ project.creator?.username || 'Inconnu' }}</span>
+          <span>Créé par: {{ project.creator.username || 'Inconnu' }}</span>
         </div>
 
-        <!-- Informations équipe -->
         <div class="project-team" *ngIf="project.users && project.users.length > 0">
           <mat-icon>group</mat-icon>
           <span>Équipe: {{ project.users.length }} membre(s)</span>
         </div>
 
-        <!-- PROJECT INFO -->
         <div class="project-info">
           <span class="status-badge" [ngClass]="(project.statuts || 'PLANNED').toLowerCase()">
             <mat-icon>{{ getStatusIcon(project.statuts || 'PLANNED') }}</mat-icon>
@@ -92,10 +86,9 @@
           </div>
         </div>
 
-        <!-- TASKS -->
         <div class="tasks-section">
           <div class="tasks-header">
-            <h3>Tasks</h3>
+            <h3>Tâches</h3>
             <span class="task-count">{{ project.tasks?.length || 0 }} tâche(s)</span>
           </div>
           
@@ -128,13 +121,13 @@
                   {{ getTaskStatusLabel(task.statuts || 'TODO') }}
                 </span>
                 <div class="task-actions">
-                  <button (click)="openTaskForm(project, task)" matTooltip="Edit Task">
+                  <button (click)="openTaskForm(project, task)" matTooltip="Modifier la tâche">
                     <mat-icon>edit</mat-icon>
                   </button>
-                  <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete Task">
+                  <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Supprimer la tâche">
                     <mat-icon>delete</mat-icon>
                   </button>
-                  <button (click)="updateTaskStatus(task, getNextStatus(task.statuts || 'TODO'))" matTooltip="Change Status">
+                  <button (click)="updateTaskStatus(task, getNextStatus(task.statuts || 'TODO'))" matTooltip="Changer le statut">
                     <mat-icon>sync</mat-icon>
                   </button>
                 </div>
@@ -148,7 +141,7 @@
           </div>
           
           <button class="btn-add-task" (click)="openTaskForm(project)">
-            <mat-icon>add_circle</mat-icon> Add Task
+            <mat-icon>add_circle</mat-icon> Ajouter une tâche
           </button>
         </div>
       </div>
@@ -158,7 +151,7 @@
   <!-- ============================================ -->
   <!-- VUE KANBAN -->
   <!-- ============================================ -->
-  <ng-container *ngIf="!isLoading && viewMode === 'kanban' && selectedProjectForKanban">
+  <ng-container *ngIf="!isLoading && isKanbanMode() && selectedProjectForKanban">
     <div class="kanban-board">
       <div class="kanban-columns">
         <div class="kanban-column" *ngFor="let column of kanbanColumns">
@@ -169,8 +162,7 @@
               <span class="task-count-badge">{{ getTasksByStatus(selectedProjectForKanban.id, column.status).length }}</span>
             </div>
           </div>
-          <div class="column-tasks" 
-               [class.empty]="getTasksByStatus(selectedProjectForKanban.id, column.status).length === 0">
+          <div class="column-tasks" [class.empty]="getTasksByStatus(selectedProjectForKanban.id, column.status).length === 0">
             <div class="kanban-task-card" 
                  *ngFor="let task of getTasksByStatus(selectedProjectForKanban.id, column.status)"
                  [class.high-priority]="task.priority === 'HIGH'"
@@ -179,10 +171,10 @@
               <div class="task-header">
                 <h4>{{ task.title }}</h4>
                 <div class="task-actions-kanban">
-                  <button (click)="openTaskForm(selectedProjectForKanban, task)" matTooltip="Edit">
+                  <button (click)="openTaskForm(selectedProjectForKanban, task)" matTooltip="Modifier">
                     <mat-icon>edit</mat-icon>
                   </button>
-                  <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Delete">
+                  <button (click)="openConfirm(task, 'deleteTask')" matTooltip="Supprimer">
                     <mat-icon>delete</mat-icon>
                   </button>
                 </div>
@@ -195,9 +187,12 @@
                 </div>
                 <div class="task-assignee" *ngIf="task.assigned_to">
                   <div class="assignee-avatar">
-                    {{ (task.assigned_to.username?.charAt(0) || 'U') | uppercase }}
+                    {{ (task.assigned_to.username.charAt(0) || 'U') | uppercase }}
                   </div>
                   <span class="assignee-name">{{ task.assigned_to.username }}</span>
+                </div>
+                <div class="task-assignee" *ngIf="!task.assigned_to">
+                  <span class="assignee-name">Non assigné</span>
                 </div>
               </div>
               <div class="task-date" [class.overdue]="isOverdue(task.due_date) && task.statuts !== 'DONE'">
@@ -205,15 +200,14 @@
                 <span>{{ formatDate(task.due_date) }}</span>
               </div>
               <div class="task-status-actions">
-                <button *ngIf="task.statuts !== 'TODO'" 
-                        (click)="updateTaskStatus(task, 'TODO')" 
-                        class="status-move-btn" matTooltip="Déplacer vers À faire">
-                  <mat-icon>arrow_left</mat-icon>
+                <button *ngIf="task.statuts !== 'TODO'" (click)="updateTaskStatus(task, 'TODO')" class="status-move-btn" matTooltip="Déplacer vers À faire">
+                  <mat-icon>arrow_back</mat-icon> À faire
                 </button>
-                <button *ngIf="task.statuts !== 'DONE'" 
-                        (click)="updateTaskStatus(task, getNextStatus(task.statuts))" 
-                        class="status-move-btn" matTooltip="Avancer">
-                  <mat-icon>arrow_right</mat-icon>
+                <button *ngIf="task.statuts !== 'IN_PROGRESS' && task.statuts !== 'DONE'" (click)="updateTaskStatus(task, 'IN_PROGRESS')" class="status-move-btn" matTooltip="Déplacer vers En cours">
+                  <mat-icon>play_arrow</mat-icon> En cours
+                </button>
+                <button *ngIf="task.statuts !== 'DONE'" (click)="updateTaskStatus(task, getNextStatus(task.statuts))" class="status-move-btn" matTooltip="Avancer">
+                  <mat-icon>arrow_forward</mat-icon> Suivant
                 </button>
               </div>
             </div>
@@ -242,48 +236,34 @@
           <mat-icon>close</mat-icon>
         </button>
       </div>
-
       <form (ngSubmit)="saveProject()" #projectFormRef="ngForm">
         <div class="form-group">
           <label>Nom du projet <span class="required">*</span></label>
-          <input type="text" [(ngModel)]="editingProject!.name" name="name" required 
-                 placeholder="Entrez le nom du projet">
+          <input type="text" [(ngModel)]="editingProject!.name" name="name" required placeholder="Entrez le nom du projet">
         </div>
-
         <div class="form-group">
           <label>Description</label>
-          <textarea [(ngModel)]="editingProject!.description" name="description" 
-                    rows="4" placeholder="Décrivez le projet..."></textarea>
+          <textarea [(ngModel)]="editingProject!.description" name="description" rows="4" placeholder="Décrivez le projet..."></textarea>
         </div>
-
         <div class="form-row">
           <div class="form-group">
             <label>Date de début</label>
             <input type="date" [(ngModel)]="editingProject!.start_date" name="start_date">
           </div>
-
           <div class="form-group">
             <label>Date de fin</label>
             <input type="date" [(ngModel)]="editingProject!.end_date" name="end_date">
           </div>
         </div>
-
         <div class="form-group">
           <label>Statut</label>
           <select [(ngModel)]="editingProject!.statuts" name="status">
-            <option *ngFor="let s of projectStatuses" [value]="s">
-              {{ getProjectStatusLabel(s) }}
-            </option>
+            <option *ngFor="let s of projectStatuses" [value]="s">{{ getProjectStatusLabel(s) }}</option>
           </select>
         </div>
-
         <div class="modal-actions">
-          <button type="button" class="btn-secondary" (click)="closeProjectForm()">
-            <mat-icon>close</mat-icon> Annuler
-          </button>
-          <button type="submit" class="btn-primary" [disabled]="projectFormRef.invalid">
-            <mat-icon>save</mat-icon> {{ editingProject?.id === 0 ? 'Créer' : 'Modifier' }}
-          </button>
+          <button type="button" class="btn-secondary" (click)="closeProjectForm()">Annuler</button>
+          <button type="submit" class="btn-primary" [disabled]="projectFormRef.invalid">Créer</button>
         </div>
       </form>
     </div>
@@ -298,64 +278,45 @@
           <mat-icon>close</mat-icon>
         </button>
       </div>
-
       <form (ngSubmit)="saveTask()" #taskFormRef="ngForm">
         <div class="form-group">
           <label>Titre <span class="required">*</span></label>
-          <input type="text" [(ngModel)]="editingTask!.title" name="title" required 
-                 placeholder="Entrez le titre de la tâche">
+          <input type="text" [(ngModel)]="editingTask!.title" name="title" required placeholder="Entrez le titre de la tâche">
         </div>
-
         <div class="form-group">
           <label>Description</label>
-          <textarea [(ngModel)]="editingTask!.description" name="description" 
-                    rows="3" placeholder="Décrivez la tâche..."></textarea>
+          <textarea [(ngModel)]="editingTask!.description" name="description" rows="3" placeholder="Décrivez la tâche..."></textarea>
         </div>
-
         <div class="form-row">
           <div class="form-group">
             <label>Assigné à</label>
             <select [(ngModel)]="editingTask!.assigned_to" name="assigned">
               <option [ngValue]="null">Non assigné</option>
-              <option *ngFor="let user of users" [ngValue]="user">
-                {{ user.username }}
-              </option>
+              <option *ngFor="let user of users" [ngValue]="user">{{ user.username }}</option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Date d'échéance</label>
             <input type="date" [(ngModel)]="editingTask!.due_date" name="due_date">
           </div>
         </div>
-
         <div class="form-row">
           <div class="form-group">
             <label>Statut</label>
             <select [(ngModel)]="editingTask!.statuts" name="status">
-              <option *ngFor="let s of taskStatuses" [value]="s">
-                {{ getTaskStatusLabel(s) }}
-              </option>
+              <option *ngFor="let s of taskStatuses" [value]="s">{{ getTaskStatusLabel(s) }}</option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Priorité</label>
             <select [(ngModel)]="editingTask!.priority" name="priority">
-              <option *ngFor="let p of taskPriorities" [value]="p">
-                {{ getTaskPriorityLabel(p) }}
-              </option>
+              <option *ngFor="let p of taskPriorities" [value]="p">{{ getTaskPriorityLabel(p) }}</option>
             </select>
           </div>
         </div>
-
         <div class="modal-actions">
-          <button type="button" class="btn-secondary" (click)="closeTaskForm()">
-            <mat-icon>close</mat-icon> Annuler
-          </button>
-          <button type="submit" class="btn-primary" [disabled]="taskFormRef.invalid">
-            <mat-icon>save</mat-icon> {{ editingTask?.id === 0 ? 'Créer' : 'Modifier' }}
-          </button>
+          <button type="button" class="btn-secondary" (click)="closeTaskForm()">Annuler</button>
+          <button type="submit" class="btn-primary" [disabled]="taskFormRef.invalid">Créer</button>
         </div>
       </form>
     </div>
@@ -370,12 +331,8 @@
       </div>
       <p>{{ getConfirmMessage() }}</p>
       <div class="modal-actions">
-        <button class="btn-danger" (click)="confirm()">
-          <mat-icon>check_circle</mat-icon> Confirmer
-        </button>
-        <button class="btn-secondary" (click)="cancelConfirm()">
-          <mat-icon>cancel</mat-icon> Annuler
-        </button>
+        <button class="btn-danger" (click)="confirm()">Confirmer</button>
+        <button class="btn-secondary" (click)="cancelConfirm()">Annuler</button>
       </div>
     </div>
   </div>
