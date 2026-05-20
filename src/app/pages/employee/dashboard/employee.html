@@ -1,21 +1,25 @@
 <!-- employee-dashboard.component.html -->
+<!-- Version: 2.3.0 - Version finale avec corrections des erreurs -->
+
 <div class="dashboard-container">
-  <!-- Header -->
+  
+  <!-- ============================================ -->
+  <!-- HEADER -->
+  <!-- ============================================ -->
   <div class="dashboard-header">
     <div class="header-left">
-  <div class="logo">
-    <div class="logo-icon">
-      <img src="assets/logo site.png" alt="Logo" class="logo-img">
+      <div class="logo">
+        <div class="logo-icon">
+          <!-- Correction: gestion d'erreur si logo manquant -->
+          <img src="assets/logo.png" alt="Logo RemoteWork" class="logo-img" (error)="onLogoError($event)">
+        </div>
+        <div class="logo-text">
+          <h1>Remote<span>Work</span></h1>
+          <p>{{ user?.username || 'Employé' }}</p>
+        </div>
+      </div>
     </div>
-    <div class="logo-text">
-      <h1>Remote<span>Work</span></h1>
-      <p>{{ user?.username || 'Employé' }}</p>
-    </div>
-  </div>
-  <br>
-  <br>
-  <br><br><br><br><br><br>
-</div>
+    
     <div class="header-right">
       <div class="date-display">
         <span class="date-icon">📅</span>
@@ -31,7 +35,7 @@
         <span class="menu-arrow" [class.rotated]="isUserMenuOpen">▼</span>
         
         <!-- Dropdown Menu -->
-        <div class="dropdown-menu" *ngIf="isUserMenuOpen">
+        <div class="dropdown-menu" *ngIf="isUserMenuOpen" (click)="$event.stopPropagation()">
           <a class="dropdown-item" (click)="goToProfile()">
             <span class="dropdown-icon">👤</span>
             <span>Mon Profil</span>
@@ -46,30 +50,45 @@
     </div>
   </div>
 
-  <!-- Quick Actions -->
+  <!-- ============================================ -->
+  <!-- QUICK ACTIONS -->
+  <!-- ============================================ -->
   <div class="quick-actions">
-    <button class="action-btn" [class.active]="!isCheckedIn && !isOnBreak" (click)="checkIn()" [disabled]="isLoading || isCheckedIn">
+    <button class="action-btn" 
+            [class.active]="!isCheckedIn && !isOnBreak" 
+            (click)="checkIn()" 
+            [disabled]="isLoading || isCheckedIn">
       <span class="btn-icon">✅</span>
       <span>Pointer Arrivée</span>
     </button>
     
-    <button class="action-btn" [class.active]="isCheckedIn && !isOnBreak && !isCheckedOut" (click)="startBreak()" [disabled]="isLoading || !isCheckedIn || isOnBreak || isCheckedOut">
+    <button class="action-btn" 
+            [class.active]="isCheckedIn && !isOnBreak && !isCheckedOut" 
+            (click)="startBreak()" 
+            [disabled]="isLoading || !isCheckedIn || isOnBreak || isCheckedOut">
       <span class="btn-icon">☕</span>
       <span>Démarrer Pause</span>
     </button>
     
-    <button class="action-btn" [class.active]="isOnBreak" (click)="endBreak()" [disabled]="isLoading || !isOnBreak">
+    <button class="action-btn" 
+            [class.active]="isOnBreak" 
+            (click)="endBreak()" 
+            [disabled]="isLoading || !isOnBreak">
       <span class="btn-icon">▶️</span>
       <span>Reprendre</span>
     </button>
     
-    <button class="action-btn" (click)="checkOut()" [disabled]="!isCheckedIn || isCheckedOut">
+    <button class="action-btn" 
+            (click)="checkOut()" 
+            [disabled]="!isCheckedIn || isCheckedOut || isLoading">
       <span class="btn-icon">🏠</span>
       <span>Pointer Sortie</span>
     </button>
   </div>
 
-  <!-- Stats Cards -->
+  <!-- ============================================ -->
+  <!-- STATS CARDS -->
+  <!-- ============================================ -->
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-icon">⏱️</div>
@@ -90,21 +109,23 @@
     <div class="stat-card">
       <div class="stat-icon">📊</div>
       <div class="stat-info">
-        <div class="stat-value">{{ productivityScore }}%</div>
-        <div class="stat-label">Productivité</div>
+        <div class="stat-value">{{ tasksCompleted }}/{{ totalTasks || 0 }}</div>
+        <div class="stat-label">Tâches complétées</div>
       </div>
     </div>
     
     <div class="stat-card">
       <div class="stat-icon">🏆</div>
       <div class="stat-info">
-        <div class="stat-value">{{ tasksCompleted }}/{{ totalTasks }}</div>
-        <div class="stat-label">Tâches complétées</div>
+        <div class="stat-value">{{ aiScore || 0 }}%</div>
+        <div class="stat-label">Score IA</div>
       </div>
     </div>
   </div>
 
+  <!-- ============================================ -->
   <!-- AI SCORE CARD -->
+  <!-- ============================================ -->
   <div class="ai-score-card">
     <div class="card-header">
       <div class="header-title">
@@ -114,24 +135,25 @@
           <p>Analyse intelligente de votre performance</p>
         </div>
       </div>
-      <button class="refresh-ai-btn" (click)="calculateAIScore()" [disabled]="isCalculatingScore" title="Rafraîchir le score">
-        <span class="refresh-icon">🔄</span>
+      <button class="refresh-ai-btn" 
+              (click)="calculateAIScore()" 
+              [disabled]="isCalculatingScore" 
+              title="Rafraîchir le score">
+        <span class="refresh-icon" [class.spinning]="isCalculatingScore">🔄</span>
         {{ isCalculatingScore ? 'Calcul...' : 'Actualiser' }}
       </button>
     </div>
     
+    <!-- Score affiché -->
     <div class="ai-score-content" *ngIf="aiScore > 0; else noAiScore">
       <div class="ai-score-circle">
         <svg class="progress-ring" width="140" height="140">
-          <circle class="progress-ring-bg" r="60" cx="70" cy="70" stroke="rgba(255,255,255,0.2)" stroke-width="8" fill="transparent"/>
-          <circle class="progress-ring-fill" r="60" cx="70" cy="70" stroke="url(#gradient)" stroke-width="8" fill="transparent"
-                  [attr.stroke-dasharray]="377" [attr.stroke-dashoffset]="377 * (1 - aiScore / 100)"/>
-          <defs>
-            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#667eea"/>
-              <stop offset="100%" stop-color="#764ba2"/>
-            </linearGradient>
-          </defs>
+          <circle class="progress-ring-bg" r="60" cx="70" cy="70" 
+                  stroke="rgba(255,255,255,0.2)" stroke-width="8" fill="transparent"/>
+          <circle class="progress-ring-fill" r="60" cx="70" cy="70" 
+                  [attr.stroke]="aiLevelColor || '#667eea'" stroke-width="8" fill="transparent"
+                  [attr.stroke-dasharray]="377" 
+                  [attr.stroke-dashoffset]="377 * (1 - (aiScore || 0) / 100)"/>
         </svg>
         <div class="score-value">{{ aiScore }}%</div>
         <div class="score-level" [ngClass]="{
@@ -139,7 +161,7 @@
           'level-medium': aiScore >= 60 && aiScore < 80,
           'level-low': aiScore < 60
         }">
-          {{ aiLevel }}
+          {{ aiLevel || (aiScore >= 80 ? 'Excellent' : aiScore >= 60 ? 'Moyen' : 'Faible') }}
         </div>
       </div>
       
@@ -155,27 +177,28 @@
           <div class="detail-icon">🎯</div>
           <div class="detail-info">
             <div class="detail-label">Activité</div>
-            <div class="detail-value">{{ todayActivityLevel }}%</div>
+            <div class="detail-value">{{ todayActivityLevel || 0 }}%</div>
           </div>
         </div>
         <div class="detail-item">
           <div class="detail-icon">✅</div>
           <div class="detail-info">
             <div class="detail-label">Tâches</div>
-            <div class="detail-value">{{ tasksCompleted }}/{{ totalTasks }}</div>
+            <div class="detail-value">{{ tasksCompleted }}/{{ totalTasks || 0 }}</div>
           </div>
         </div>
         <div class="detail-item">
           <div class="detail-icon">⏰</div>
           <div class="detail-info">
             <div class="detail-label">Présence</div>
-            <div class="detail-value">{{ workHoursToday }}h</div>
+            <div class="detail-value">{{ workHoursToday.toFixed(1) }}h</div>
           </div>
         </div>
       </div>
     </div>
     
-    <div class="ai-recommendations" *ngIf="aiRecommendations.length > 0">
+    <!-- Recommandations IA -->
+    <div class="ai-recommendations" *ngIf="aiRecommendations && aiRecommendations.length > 0">
       <div class="recommendations-header">
         <span class="recommendations-icon">💡</span>
         <span>Recommandations personnalisées</span>
@@ -188,6 +211,25 @@
       </ul>
     </div>
     
+    <!-- Pénalités et Bonus -->
+    <div class="ai-breakdown" *ngIf="(aiPenalties && aiPenalties.length > 0) || (aiBonuses && aiBonuses.length > 0)">
+      <div class="breakdown-section" *ngIf="aiPenalties && aiPenalties.length > 0">
+        <span class="breakdown-title penalty">⚠️ Pénalités</span>
+        <div class="breakdown-item" *ngFor="let p of aiPenalties">
+          <span class="breakdown-name">{{ p.name || p }}</span>
+          <span class="breakdown-value penalty-value">{{ p.value || p }} pts</span>
+        </div>
+      </div>
+      <div class="breakdown-section" *ngIf="aiBonuses && aiBonuses.length > 0">
+        <span class="breakdown-title bonus">🎉 Bonus</span>
+        <div class="breakdown-item" *ngFor="let b of aiBonuses">
+          <span class="breakdown-name">{{ b.name || b }}</span>
+          <span class="breakdown-value bonus-value">+{{ b.value || b }} pts</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Template sans score -->
     <ng-template #noAiScore>
       <div class="ai-score-placeholder">
         <div class="placeholder-icon">🤖</div>
@@ -197,7 +239,9 @@
     </ng-template>
   </div>
 
-  <!-- Activity Stats Card -->
+  <!-- ============================================ -->
+  <!-- ACTIVITY STATS CARD -->
+  <!-- ============================================ -->
   <div class="activity-stats-card">
     <div class="card-header">
       <div class="header-title">
@@ -217,14 +261,14 @@
       <div class="activity-stat">
         <div class="activity-icon">🖱️</div>
         <div class="activity-info">
-          <div class="activity-value">{{ todayMouseClicks || 0 }}</div>
+          <div class="activity-value">{{ todayMouseClicks || 0 | number }}</div>
           <div class="activity-label">Clicks souris</div>
         </div>
       </div>
       <div class="activity-stat">
         <div class="activity-icon">⌨️</div>
         <div class="activity-info">
-          <div class="activity-value">{{ todayKeyboardClicks || 0 }}</div>
+          <div class="activity-value">{{ todayKeyboardClicks || 0 | number }}</div>
           <div class="activity-label">Clicks clavier</div>
         </div>
       </div>
@@ -266,8 +310,10 @@
     </div>
   </div>
 
-  <!-- Current Status -->
-  <div class="status-card" *ngIf="isCheckedIn">
+  <!-- ============================================ -->
+  <!-- CURRENT STATUS CARDS -->
+  <!-- ============================================ -->
+  <div class="status-card" *ngIf="isCheckedIn && !isCheckedOut">
     <div class="status-header">
       <span class="status-icon">🟢</span>
       <span class="status-text">En service</span>
@@ -276,6 +322,10 @@
     <div class="status-detail" *ngIf="isOnBreak">
       <span class="break-icon">☕</span>
       <span>En pause depuis {{ breakDuration }} minutes</span>
+    </div>
+    <div class="status-detail" *ngIf="!isOnBreak && workHoursToday > 0">
+      <span class="work-icon">💼</span>
+      <span>{{ workHoursToday.toFixed(1) }} heures travaillées aujourd'hui</span>
     </div>
   </div>
 
@@ -289,7 +339,17 @@
     </div>
   </div>
 
-  <!-- My Tasks Section -->
+  <div class="status-card success" *ngIf="isCheckedOut">
+    <div class="status-header">
+      <span class="status-icon">🏁</span>
+      <span class="status-text">Journée terminée</span>
+      <span class="status-time">{{ workHoursToday.toFixed(1) }}h travaillées</span>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- MY TASKS SECTION -->
+  <!-- ============================================ -->
   <div class="tasks-card">
     <div class="card-header">
       <div class="header-title">
@@ -301,10 +361,10 @@
       </div>
       <div class="card-actions">
         <select [(ngModel)]="taskFilter" (change)="filterTasks()" class="filter-select">
-          <option value="all">Toutes</option>
-          <option value="TODO">À faire</option>
-          <option value="IN_PROGRESS">En cours</option>
-          <option value="DONE">Terminées</option>
+          <option value="all">Toutes ({{ tasks.length }})</option>
+          <option value="TODO">À faire ({{ getStatusCount('TODO') }})</option>
+          <option value="IN_PROGRESS">En cours ({{ getStatusCount('IN_PROGRESS') }})</option>
+          <option value="DONE">Terminées ({{ getStatusCount('DONE') }})</option>
         </select>
       </div>
     </div>
@@ -315,19 +375,21 @@
           <input type="checkbox" 
                  [checked]="task.statuts === 'DONE'"
                  (change)="updateTaskStatus(task)"
-                 [disabled]="task.statuts === 'DONE'">
+                 [disabled]="task.statuts === 'DONE' || isLoading">
         </div>
         <div class="task-content">
           <div class="task-title">{{ task.title }}</div>
-          <div class="task-desc">{{ task.description }}</div>
+          <div class="task-desc" *ngIf="task.description">{{ task.description | slice:0:100 }}{{ task.description.length > 100 ? '...' : '' }}</div>
           <div class="task-meta">
-            <span class="task-priority" [ngClass]="task.priority.toLowerCase()">
-              {{ task.priority }}
+            <span class="task-priority" [ngClass]="(task.priority || 'MEDIUM').toLowerCase()">
+              {{ task.priority || 'MEDIUM' }}
             </span>
-            <span class="task-due">📅 {{ formatDate(task.due_date) }}</span>
+            <span class="task-due" [class.overdue]="isTaskOverdue(task.due_date) && task.statuts !== 'DONE'">
+              📅 {{ formatDate(task.due_date) }}
+            </span>
           </div>
         </div>
-        <div class="task-badge" [ngClass]="task.statuts.toLowerCase()">
+        <div class="task-badge" [ngClass]="(task.statuts || 'TODO').toLowerCase()">
           {{ getStatusLabel(task.statuts) }}
         </div>
       </div>
@@ -335,11 +397,14 @@
       <div class="empty-state" *ngIf="filteredTasks.length === 0">
         <div class="empty-icon">📭</div>
         <p>Aucune tâche trouvée</p>
+        <p class="empty-hint" *ngIf="taskFilter !== 'all'">Essayez de changer le filtre</p>
       </div>
     </div>
   </div>
 
-  <!-- Leave Request Section -->
+  <!-- ============================================ -->
+  <!-- LEAVE REQUEST SECTION -->
+  <!-- ============================================ -->
   <div class="leave-card">
     <div class="card-header">
       <div class="header-title">
@@ -349,7 +414,7 @@
           <p>Gérer vos demandes d'absence</p>
         </div>
       </div>
-      <button class="new-request-btn" (click)="openLeaveModal()">
+      <button class="new-request-btn" (click)="openLeaveModal()" [disabled]="isLoading">
         <span>+</span> Nouvelle demande
       </button>
     </div>
@@ -371,18 +436,18 @@
           <div class="leave-dates">
             📅 {{ formatDate(request.start_date) }} → {{ formatDate(request.end_date) }}
           </div>
-          <div class="leave-type">{{ request.type }}</div>
-          <div class="leave-reason">{{ request.reason }}</div>
+          <div class="leave-type">{{ getLeaveTypeLabel(request.type) }}</div>
+          <div class="leave-reason" *ngIf="request.reason">{{ request.reason | slice:0:80 }}{{ request.reason.length > 80 ? '...' : '' }}</div>
         </div>
-        <div class="leave-status" [ngClass]="request.statuts.toLowerCase()">
+        <div class="leave-status" [ngClass]="(request.statuts || 'PENDING').toLowerCase()">
           {{ getLeaveStatusLabel(request.statuts) }}
         </div>
         
         <div class="leave-actions" *ngIf="request.statuts === 'PENDING'">
-          <button class="btn-edit" (click)="editLeaveRequest(request)" title="Modifier">
+          <button class="btn-edit" (click)="editLeaveRequest(request)" title="Modifier" [disabled]="isLoading">
             ✏️
           </button>
-          <button class="btn-delete" (click)="openDeleteModal(request.id, request)" title="Supprimer">
+          <button class="btn-delete" (click)="openDeleteModal(request.id, request)" title="Supprimer" [disabled]="isLoading">
             🗑️
           </button>
         </div>
@@ -391,21 +456,26 @@
       <div class="empty-state" *ngIf="leaveRequests.length === 0">
         <div class="empty-icon">📅</div>
         <p>Aucune demande de congé</p>
+        <button class="btn-primary-small" (click)="openLeaveModal()">+ Créer une demande</button>
       </div>
     </div>
   </div>
 
-  <!-- Floating Action Buttons -->
+  <!-- ============================================ -->
+  <!-- FLOATING ACTION BUTTONS -->
+  <!-- ============================================ -->
   <div class="fab-buttons">
     <button class="fab-btn" (click)="refreshData()" [class.loading]="isLoading" title="Rafraîchir">
-      <span class="fab-icon">🔄</span>
+      <span class="fab-icon" [class.spinning]="isLoading">🔄</span>
     </button>
     <button class="fab-btn ai-fab" (click)="calculateAIScore()" [class.loading]="isCalculatingScore" title="Calculer score IA">
-      <span class="fab-icon">🤖</span>
+      <span class="fab-icon" [class.pulse]="isCalculatingScore">🤖</span>
     </button>
   </div>
 
-  <!-- Leave Request Modal -->
+  <!-- ============================================ -->
+  <!-- LEAVE REQUEST MODAL -->
+  <!-- ============================================ -->
   <div class="modal" [class.show]="showLeaveModal" (click)="closeModal($event)">
     <div class="modal-content">
       <div class="modal-header">
@@ -414,8 +484,8 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Type de congé</label>
-          <select [(ngModel)]="newLeave.type">
+          <label>Type de congé <span class="required">*</span></label>
+          <select [(ngModel)]="newLeave.type" [disabled]="isLoading">
             <option value="ANNUAL">Congés annuels</option>
             <option value="SICK">Congés maladie</option>
             <option value="PERSONAL">Congés personnels</option>
@@ -425,21 +495,24 @@
         
         <div class="form-row">
           <div class="form-group">
-            <label>Date début</label>
-            <input type="date" [(ngModel)]="newLeave.start_date">
+            <label>Date début <span class="required">*</span></label>
+            <input type="date" [(ngModel)]="newLeave.start_date" [disabled]="isLoading">
           </div>
           <div class="form-group">
-            <label>Date fin</label>
-            <input type="date" [(ngModel)]="newLeave.end_date">
+            <label>Date fin <span class="required">*</span></label>
+            <input type="date" [(ngModel)]="newLeave.end_date" [disabled]="isLoading">
           </div>
         </div>
         
         <div class="form-group">
-          <label>Raison</label>
-          <textarea [(ngModel)]="newLeave.reason" rows="3" placeholder="Décrivez la raison de votre demande..."></textarea>
+          <label>Raison <span class="required">*</span></label>
+          <textarea [(ngModel)]="newLeave.reason" rows="3" 
+                    placeholder="Décrivez la raison de votre demande..." 
+                    [disabled]="isLoading"></textarea>
+          <span class="char-counter">{{ newLeave.reason.length }}/500</span>
         </div>
         
-        <div class="form-group" *ngIf="leaveValidationErrors.length > 0">
+        <div class="form-group error-group" *ngIf="leaveValidationErrors && leaveValidationErrors.length > 0">
           <div class="error-messages">
             <div *ngFor="let error of leaveValidationErrors" class="error">
               ⚠️ {{ error }}
@@ -448,15 +521,18 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-cancel" (click)="closeLeaveModal()">Annuler</button>
-        <button class="btn-submit" (click)="submitLeaveRequest()" [disabled]="!canSubmitLeave()">
-          {{ editingLeaveId ? 'Modifier' : 'Envoyer' }}
+        <button class="btn-cancel" (click)="closeLeaveModal()" [disabled]="isLoading">Annuler</button>
+        <button class="btn-submit" (click)="submitLeaveRequest()" [disabled]="!canSubmitLeave() || isLoading">
+          <span *ngIf="isLoading" class="spinner-small"></span>
+          <span *ngIf="!isLoading">{{ editingLeaveId ? 'Modifier' : 'Envoyer' }}</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Delete Confirmation Modal -->
+  <!-- ============================================ -->
+  <!-- DELETE CONFIRMATION MODAL -->
+  <!-- ============================================ -->
   <div class="modal delete-modal" [class.show]="showDeleteModal" (click)="cancelDelete()">
     <div class="modal-content delete-modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header delete-header">
@@ -470,22 +546,25 @@
           <span class="delete-detail-icon">📋</span>
           <span>{{ deleteRequestTitle }}</span>
         </div>
-        <p class="delete-warning">Cette action est irréversible.</p>
+        <p class="delete-warning">⚠️ Cette action est irréversible.</p>
       </div>
       <div class="modal-footer delete-footer">
-        <button class="btn-cancel" (click)="cancelDelete()">
+        <button class="btn-cancel" (click)="cancelDelete()" [disabled]="isLoading">
           <span>❌</span> Annuler
         </button>
-        <button class="btn-confirm-delete" (click)="confirmDelete()">
+        <button class="btn-confirm-delete" (click)="confirmDelete()" [disabled]="isLoading">
           <span>🗑️</span> Supprimer
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Notification Toast -->
-  <div class="notification" [class.show]="showNotification" [ngClass]="notificationType">
-    <span class="notification-icon">{{ notificationIcon }}</span>
-    <span class="notification-message">{{ notificationMessage }}</span>
+  <!-- ============================================ -->
+  <!-- NOTIFICATION TOAST -->
+  <!-- ============================================ -->
+  <div class="notification" [class.show]="showNotification" [ngClass]="notification?.type || 'success'">
+    <span class="notification-icon">{{ notification?.icon || '✅' }}</span>
+    <span class="notification-message">{{ notification?.message || '' }}</span>
   </div>
+
 </div>

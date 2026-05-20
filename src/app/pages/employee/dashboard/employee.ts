@@ -1,31 +1,93 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+// src/app/pages/employee-dashboard/employee-dashboard.component.ts
+/**
+ * Dashboard Employé - Remote Work Supervisor
+ * Version: 2.3.0 - Version finale complète et optimisée
+ * 
+ * Fonctionnalités:
+ * - Pointage (check-in/out) avec géolocalisation
+ * - Gestion des pauses
+ * - Suivi d'activité (clics souris/clavier)
+ * - Captures d'écran automatiques
+ * - Score IA de productivité
+ * - Gestion des tâches
+ * - Demandes de congé
+ */
+
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
-import { interval, Subscription, catchError, of, finalize } from 'rxjs';
+import { interval, Subscription, catchError, of, finalize, Subject, timer } from 'rxjs';
+import { takeUntil, debounceTime } from 'rxjs/operators';
 import { AuthService } from '../../../core/services/AuthService/auth';
-import { EmployeeApiService } from "../../../services/employee";
-import { AiScoreService } from '../../../services/ai-score';
+import { EmployeeApiService, TodayDashboardResponse } from "../../../services/employee";
+import { AiScoreService, ProductivityResponse } from '../../../services/ai-score';
 
 Chart.register(...registerables);
+
+// ============================================
+// INTERFACES
+// ============================================
+
+interface Task {
+  id: number;
+  title: string;
+  description: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  statuts: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  due_date: string;
+  assigned_to?: any;
+}
+
+interface LeaveRequest {
+  id: number;
+  type: string;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  statuts: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  created_at?: string;
+}
+
+interface Notification {
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  icon: string;
+}
+
+interface ActivityStats {
+  total_keyboard_clicks: number;
+  total_mouse_clicks: number;
+  avg_activity_level: number;
+  logs_count: number;
+  trend?: number;
+  min_activity_level?: number;
+  max_activity_level?: number;
+}
 
 @Component({
   selector: 'app-employee-dashboard',
   standalone: true,
   imports: [CommonModule, FormsModule, HttpClientModule, BaseChartDirective],
   templateUrl: './employee.html',
-  styleUrls: ['./employee.scss']
+  styleUrls: ['./employee.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EmployeeDashboardComponent implements OnInit, OnDestroy {
+  
+  // ============================================
+  // PROPRIÉTÉS PUBLIQUES
+  // ============================================
+  
   currentDate = new Date();
   isLoading = false;
+  
+  // Notification
+  notification: Notification | null = null;
   showNotification = false;
-  notificationMessage = '';
-  notificationType = 'success';
-  notificationIcon = '✅';
   
   // User data
   user: any = null;
@@ -38,7 +100,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   workHoursToday = 0;
   breakHoursToday = 0;
   breakDuration = 0;
-  productivityScore = 85;
   attendanceId: number | null = null;
   timeLogId: number | null = null;
   activeBreakId: number | null = null;
@@ -47,17 +108,18 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   currentStatus: string = '📅 Non pointé';
   currentStatusClass: string = 'status-not-checked';
   attendanceStatus: string = '';
+  lateMinutes: number = 0;
   
   // Tasks
-  tasks: any[] = [];
-  filteredTasks: any[] = [];
-  taskFilter = 'all';
+  tasks: Task[] = [];
+  filteredTasks: Task[] = [];
+  taskFilter: 'all' | 'TODO' | 'IN_PROGRESS' | 'DONE' = 'all';
   tasksCompleted = 0;
   totalTasks = 0;
   
   // Leave
-  leaveRequests: any[] = [];
-  leaveBalance = 15;
+  leaveRequests: LeaveRequest[] = [];
+  leaveBalance = 25;
   pendingRequests = 0;
   showLeaveModal = false;
   editingLeaveId: number | null = null;
@@ -73,7 +135,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   showDeleteModal = false;
   deleteRequestId: number | null = null;
   deleteRequestTitle: string = '';
-  deleteRequestType: string = '';
   
   // Chart
   weeklyData: ChartConfiguration<'line'>['data'] = {
@@ -100,10 +161,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       legend: {
         display: true,
         position: 'top',
-        labels: {
-          color: '#333',
-          font: { size: 12 }
-        }
+        labels: { color: '#333', font: { size: 12 } }
       },
       tooltip: {
         backgroundColor: 'rgba(0,0,0,0.8)',
@@ -112,74 +170,85 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       }
     },
     scales: {
-      y: {
-        beginAtZero: true,
-        max: 10,
-        grid: {
-          color: '#e0e0e0'
-        },
-        title: {
-          display: true,
-          text: 'Heures',
-          color: '#666'
-        }
+      y: { 
+        beginAtZero: true, 
+        max: 10, 
+        grid: { color: '#e0e0e0' }, 
+        title: { display: true, text: 'Heures', color: '#666' } 
       },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: '#666'
-        }
+      x: { 
+        grid: { display: false }, 
+        ticks: { color: '#666' } 
       }
     }
   };
   
+  // Activity tracking
+  todayMouseClicks: number = 0;
+  todayKeyboardClicks: number = 0;
+  todayActivityLevel: number = 0;
+  todayActivityLogsCount: number = 0;
+  inactiveDisplayMinutes: number = 0;
+  isUserActive: boolean = true;
+  activityTrend: number = 0;
+  
+  // AI Score
+  aiScore: number = 0;
+  aiLevel: string = '';
+  aiLevelIcon: string = '';
+  aiLevelColor: string = '';
+  aiRecommendations: string[] = [];
+  aiRecommendationsDetailed: any[] = [];
+  aiPenalties: any[] = [];
+  aiBonuses: any[] = [];
+  isCalculatingScore: boolean = false;
+  
+  // User menu
+  isUserMenuOpen: boolean = false;
+  
+  // Logo error
+  logoError: boolean = false;
+  
+  // ============================================
+  // PROPRIÉTÉS PRIVÉES
+  // ============================================
+  
   private breakInterval: any;
   private refreshSubscription?: Subscription;
   private tasksSubscription?: Subscription;
-  
-  // ========== ACTIVITY TRACKING ==========
   private activityInterval: any;
+  private inactivityCheckInterval: any;
+  private screenshotInterval: any;
+  private destroy$ = new Subject<void>();
+  
+  // Activity tracking
   private keyboardClicks = 0;
   private mouseClicks = 0;
   private currentActivityLevel = 100;
-  public inactiveDisplayMinutes: number = 0;
-  public isUserActive: boolean = true;
   private lastActivityTime = Date.now();
   private readonly INACTIVITY_THRESHOLD = 15; // 15 minutes
   private readonly SEND_INTERVAL = 60000; // 1 minute
-  private inactivityCheckInterval: any;
+  private readonly SCREENSHOT_INTERVAL = 600000; // 10 minutes
   private activityListeners: Map<string, () => void> = new Map();
   
-  // Activity stats for template
-  public todayMouseClicks: number = 0;
-  public todayKeyboardClicks: number = 0;
-  public todayActivityLevel: number = 0;
-  public todayActivityLogsCount: number = 0;
-  
-  // ========== SCREENSHOTS ==========
-  private screenshotInterval: any;
-  private readonly SCREENSHOT_INTERVAL = 600000; // 10 minutes (600000 ms)
-  
-  // ========== AI SCORE ==========
-  public aiScore: number = 0;
-  public aiLevel: string = '';
-  public aiRecommendations: string[] = [];
-  public isCalculatingScore: boolean = false;
-  
-  // ========== USER MENU ==========
-  public isUserMenuOpen: boolean = false;
+  // ============================================
+  // CONSTRUCTEUR
+  // ============================================
   
   constructor(
     private apiService: EmployeeApiService,
     private authService: AuthService,
     private aiScoreService: AiScoreService,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) {}
   
+  // ============================================
+  // LIFECYCLE HOOKS
+  // ============================================
+  
   ngOnInit(): void {
-    console.log('🚀 ngOnInit - Initialisation du dashboard');
+    console.log('🚀 [EmployeeDashboard] Initialisation');
     this.loadUserData();
     this.loadTodayAttendance();
     this.loadTasks();
@@ -187,50 +256,54 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.loadWeeklyStats();
     this.loadTodayActivityStats();
     
-    // Démarrer le tracking d'activité
     this.initActivityTracking();
-    
-    // Démarrer les captures automatiques
     this.startAutoScreenshots();
     
-    // Calculer le score IA
-    this.calculateAIScore();
+    // Attendre un peu avant de calculer le score IA
+    timer(2000).pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.calculateAIScore();
+    });
     
-    this.refreshSubscription = interval(60000).subscribe(() => {
+    // Rafraîchissement périodique (toutes les minutes)
+    this.refreshSubscription = interval(60000).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe(() => {
       console.log('🔄 Auto-refresh des données...');
       this.refreshData();
     });
   }
   
   ngOnDestroy(): void {
-    if (this.refreshSubscription) {
-      this.refreshSubscription.unsubscribe();
-    }
-    if (this.tasksSubscription) {
-      this.tasksSubscription.unsubscribe();
-    }
-    if (this.breakInterval) {
-      clearInterval(this.breakInterval);
-    }
-    if (this.screenshotInterval) {
-      clearInterval(this.screenshotInterval);
-    }
+    console.log('🛑 [EmployeeDashboard] Destruction');
+    this.destroy$.next();
+    this.destroy$.complete();
     
-    // Arrêter le tracking d'activité
+    this.stopIntervals();
     this.stopActivityTracking();
   }
   
-  private isAuthenticated(): boolean {
-    return this.authService.isAuthenticated();
+  private stopIntervals(): void {
+    if (this.breakInterval) {
+      clearInterval(this.breakInterval);
+      this.breakInterval = null;
+    }
+    if (this.screenshotInterval) {
+      clearInterval(this.screenshotInterval);
+      this.screenshotInterval = null;
+    }
   }
   
-  loadUserData(): void {
+  // ============================================
+  // USER METHODS
+  // ============================================
+  
+  private loadUserData(): void {
     const currentUser = this.authService.getCurrentUser();
     
     if (currentUser) {
       this.user = {
         id: currentUser.id,
-        username: currentUser.username,
+        username: currentUser.username || currentUser.email?.split('@')[0] || 'Employé',
         email: currentUser.email,
         role: currentUser.role?.name?.toUpperCase() || 'EMPLOYEE',
         department: currentUser.department,
@@ -238,16 +311,25 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       };
       console.log('✅ Utilisateur chargé:', this.user);
     } else {
-      this.user = {
-        username: 'Employé',
-        email: 'employe@test.com',
-        role: 'EMPLOYEE',
-        id: 1
+      this.user = { 
+        id: 1,
+        username: 'Employé', 
+        email: 'employe@test.com', 
+        role: 'EMPLOYEE' 
       };
     }
+    this.cdr.detectChanges();
   }
   
-  // ========== USER MENU METHODS ==========
+  /**
+   * Gestion d'erreur si le logo n'est pas trouvé
+   */
+  onLogoError(event: Event): void {
+    this.logoError = true;
+    const img = event.target as HTMLImageElement;
+    img.style.display = 'none';
+    console.warn('Logo non trouvé, vérifiez le chemin assets/logo.png');
+  }
   
   toggleUserMenu(): void {
     this.isUserMenuOpen = !this.isUserMenuOpen;
@@ -261,66 +343,59 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   logout(): void {
     this.isUserMenuOpen = false;
     this.authService.logout();
+    this.router.navigate(['/login']);
   }
   
-  // ========== FORMATAGE DES DATES ==========
+  // ============================================
+  // FORMATAGE
+  // ============================================
   
   formatDate(dateString: string): string {
     if (!dateString) return '';
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
+      return new Date(dateString).toLocaleDateString('fr-FR', {
+        day: '2-digit', 
+        month: '2-digit', 
         year: 'numeric'
       });
-    } catch {
-      return dateString;
+    } catch { 
+      return dateString; 
     }
   }
   
   formatDateForInput(dateString: string): string {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
+    return new Date(dateString).toISOString().split('T')[0];
   }
   
   formatDateTime(date: Date | string | null): string {
     if (!date) return '';
     try {
-      const d = new Date(date);
-      return d.toLocaleString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
+      return new Date(date).toLocaleString('fr-FR', {
+        day: '2-digit', 
+        month: '2-digit', 
         year: 'numeric',
-        hour: '2-digit',
+        hour: '2-digit', 
         minute: '2-digit'
       });
-    } catch {
-      return String(date);
+    } catch { 
+      return String(date); 
     }
   }
   
-  formatTime(date: Date | null): string {
-    if (!date) return '';
-    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  }
+  // ============================================
+  // ATTENDANCE METHODS
+  // ============================================
   
-  // ========== ATTENDANCE ==========
-  
-  loadTodayAttendance(): void {
-    console.log('🔄 [loadTodayAttendance] Début');
-    
+  private loadTodayAttendance(): void {
     if (!this.apiService.isAuthenticated()) {
-      console.warn('⚠️ Non authentifié, chargement mock');
-      this.loadMockAttendance();
+      this.setMockAttendance();
       return;
     }
     
     this.apiService.getTodayDashboard().subscribe({
-      next: (response) => {
-        console.log('✅ [loadTodayAttendance] Réponse reçue:', response);
-        if (response && response.success) {
+      next: (response: TodayDashboardResponse) => {
+        if (response?.success) {
           const data = response.data;
           this.isCheckedIn = !!data.attendance?.checkIn;
           this.isCheckedOut = !!data.attendance?.checkOut;
@@ -330,24 +405,20 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
           this.startTime = data.attendance?.checkIn ? new Date(data.attendance.checkIn) : null;
           this.attendanceId = data.attendance?.id || null;
           this.attendanceStatus = data.attendance?.status || 'ABSENT';
+          this.lateMinutes = data.attendance?.lateMinutes || 0;
           
           this.updateStatusDisplay(this.attendanceStatus);
-          
-          console.log('📅 État:', { 
-            isCheckedIn: this.isCheckedIn, 
-            isCheckedOut: this.isCheckedOut,
-            status: this.attendanceStatus
-          });
+          this.cdr.detectChanges();
         }
       },
       error: (error) => {
-        console.error('❌ [loadTodayAttendance] Erreur:', error);
-        this.loadMockAttendance();
+        console.error('❌ Erreur chargement présence:', error);
+        this.setMockAttendance();
       }
     });
   }
   
-  loadMockAttendance(): void {
+  private setMockAttendance(): void {
     this.isCheckedIn = false;
     this.isCheckedOut = false;
     this.isOnBreak = false;
@@ -355,6 +426,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.breakHoursToday = 0;
     this.attendanceStatus = 'ABSENT';
     this.updateStatusDisplay('ABSENT');
+    this.cdr.detectChanges();
   }
   
   checkIn(): void {
@@ -363,7 +435,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       return;
     }
     
-    if (!this.isAuthenticated()) {
+    if (!this.apiService.isAuthenticated()) {
       this.showNotificationMessage('Veuillez vous connecter d\'abord', 'error');
       return;
     }
@@ -372,13 +444,10 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const locationData = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          };
-          this.sendCheckIn(locationData);
-        },
+        (position) => this.sendCheckIn({ 
+          latitude: position.coords.latitude, 
+          longitude: position.coords.longitude 
+        }),
         () => this.sendCheckIn(null)
       );
     } else {
@@ -396,21 +465,18 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     
     this.apiService.checkIn(body).pipe(
       catchError((error) => {
-        console.error('❌ Erreur check-in:', error);
-        let errorMessage = 'Erreur lors du check-in';
-        if (error.status === 401) {
-          errorMessage = 'Session expirée. Veuillez vous reconnecter.';
-        } else if (error.error?.message) {
-          errorMessage = error.error.message;
-        }
+        const errorMessage = error.status === 401 
+          ? 'Session expirée. Veuillez vous reconnecter.' 
+          : error.error?.message || 'Erreur lors du check-in';
         this.showNotificationMessage(errorMessage, 'error');
         return of(null);
       }),
-      finalize(() => {
-        this.isLoading = false;
+      finalize(() => { 
+        this.isLoading = false; 
+        this.cdr.detectChanges(); 
       })
     ).subscribe((response: any) => {
-      if (response && response.success) {
+      if (response?.success) {
         this.isCheckedIn = true;
         this.startTime = new Date();
         this.attendanceId = response.data?.attendance?.id;
@@ -428,14 +494,8 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       this.showNotificationMessage('Vous n\'avez pas encore pointé', 'error');
       return;
     }
-    
     if (this.isCheckedOut) {
       this.showNotificationMessage('Vous avez déjà pointé votre sortie', 'error');
-      return;
-    }
-    
-    if (!this.isAuthenticated()) {
-      this.showNotificationMessage('Veuillez vous connecter d\'abord', 'error');
       return;
     }
     
@@ -443,15 +503,15 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     
     this.apiService.checkOut().pipe(
       catchError((error) => {
-        console.error('❌ Erreur check-out:', error);
         this.showNotificationMessage('Erreur lors du check-out', 'error');
         return of(null);
       }),
-      finalize(() => {
-        this.isLoading = false;
+      finalize(() => { 
+        this.isLoading = false; 
+        this.cdr.detectChanges(); 
       })
     ).subscribe((response: any) => {
-      if (response && response.success) {
+      if (response?.success) {
         this.isCheckedOut = true;
         this.isCheckedIn = false;
         this.isOnBreak = false;
@@ -459,33 +519,15 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         
         if (this.breakInterval) {
           clearInterval(this.breakInterval);
+          this.breakInterval = null;
         }
         
         const workHours = response.data?.workHours || 0;
-        this.updateStatusDisplay(this.attendanceStatus);
+        const statusMessage = this.attendanceStatus === 'ABSENT' || this.attendanceStatus === 'PARTIAL' 
+          ? '⚠️ Attention: Moins de 8h travaillées' 
+          : '✅ Journée complète';
         
-        let statusMessage = '';
-        let notificationType: 'success' | 'error' = 'success';
-        
-        switch(this.attendanceStatus) {
-          case 'ABSENT':
-            statusMessage = '⚠️ Attention: Moins de 7h travaillées';
-            notificationType = 'error';
-            break;
-          case 'PARTIAL':
-            statusMessage = '⚠️ Journée incomplète (moins de 8h)';
-            notificationType = 'error';
-            break;
-          default:
-            statusMessage = '✅ Journée complète';
-            notificationType = 'success';
-        }
-        
-        this.showNotificationMessage(
-          `Check-out effectué. ${workHours.toFixed(2)} heures travaillées. ${statusMessage}`, 
-          notificationType
-        );
-        
+        this.showNotificationMessage(`Check-out effectué. ${workHours.toFixed(2)}h travaillées. ${statusMessage}`, 'success');
         this.loadTodayAttendance();
       }
     });
@@ -496,19 +538,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       this.showNotificationMessage('Vous devez d\'abord pointer votre arrivée', 'error');
       return;
     }
-    
     if (this.isOnBreak) {
       this.showNotificationMessage('Vous êtes déjà en pause', 'error');
       return;
     }
-    
     if (this.isCheckedOut) {
       this.showNotificationMessage('Vous avez déjà terminé votre journée', 'error');
-      return;
-    }
-    
-    if (!this.isAuthenticated()) {
-      this.showNotificationMessage('Veuillez vous connecter d\'abord', 'error');
       return;
     }
     
@@ -516,19 +551,15 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     
     this.apiService.startBreak({ type: 'SHORT' }).pipe(
       catchError((error) => {
-        console.error('❌ Erreur début pause:', error);
-        let errorMessage = 'Erreur lors du début de pause';
-        if (error.error?.message) {
-          errorMessage = error.error.message;
-        }
-        this.showNotificationMessage(errorMessage, 'error');
+        this.showNotificationMessage(error.error?.message || 'Erreur lors du début de pause', 'error');
         return of(null);
       }),
-      finalize(() => {
-        this.isLoading = false;
+      finalize(() => { 
+        this.isLoading = false; 
+        this.cdr.detectChanges(); 
       })
     ).subscribe((response: any) => {
-      if (response && response.success) {
+      if (response?.success) {
         this.isOnBreak = true;
         this.activeBreakId = response.data?.id;
         this.breakDuration = 0;
@@ -540,6 +571,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         this.breakInterval = setInterval(() => {
           if (this.isOnBreak) {
             this.breakDuration++;
+            this.cdr.detectChanges();
           }
         }, 60000);
         this.loadTodayAttendance();
@@ -548,7 +580,6 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   }
   
   endBreak(): void {
-    console.log('🟢 endBreak() appelée');
     if (!this.isOnBreak) {
       this.showNotificationMessage('Vous n\'êtes pas en pause', 'error');
       return;
@@ -557,54 +588,60 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     
     this.apiService.endBreak().subscribe({
-      next: (response) => {
-        console.log('✅ endBreak réponse:', response);
-        if (response.success) {
+      next: (response: any) => {
+        if (response?.success) {
           this.isOnBreak = false;
           this.activeBreakId = null;
           if (this.breakInterval) {
             clearInterval(this.breakInterval);
+            this.breakInterval = null;
           }
-          const duration = response.data?.durationMinutes || this.breakDuration;
-          this.showNotificationMessage(`Pause terminée après ${duration} minutes`, 'success');
+          this.showNotificationMessage(`Pause terminée après ${response.data?.durationMinutes || this.breakDuration} minutes`, 'success');
           this.loadTodayAttendance();
         }
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
-        console.error('❌ endBreak erreur:', error);
         this.showNotificationMessage('Erreur lors de la fin de pause', 'error');
         this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }
   
-  // ========== STATISTIQUES ==========
-  
-  loadMockWeeklyStats(): void {
-    this.weeklyData.datasets[0].data = [7.5, 8, 6.5, 8.5, 7, 0];
-    this.weeklyData = { ...this.weeklyData };
+  private updateStatusDisplay(status: string): void {
+    const statusMap: Record<string, { text: string; class: string }> = {
+      'PRESENT': { text: '✅ Présent', class: 'status-present' },
+      'LATE': { text: '⚠️ En retard', class: 'status-late' },
+      'PARTIAL': { text: '⏳ Journée incomplète', class: 'status-partial' },
+      'ABSENT': { text: '❌ Absent', class: 'status-absent' }
+    };
+    
+    const defaultStatus = { text: '📅 Non pointé', class: 'status-not-checked' };
+    const statusInfo = statusMap[status] || defaultStatus;
+    this.currentStatus = statusInfo.text;
+    this.currentStatusClass = statusInfo.class;
+    this.cdr.detectChanges();
   }
   
-  // ========== TÂCHES ==========
+  // ============================================
+  // TASKS METHODS
+  // ============================================
   
-  loadTasks(): void {
+  private loadTasks(): void {
     if (this.tasksSubscription) {
       this.tasksSubscription.unsubscribe();
     }
     
-    if (!this.isAuthenticated()) {
-      this.loadMockTasks();
+    if (!this.apiService.isAuthenticated()) {
+      this.setMockTasks();
       return;
     }
     
     const userId = this.user?.id || 1;
-    console.log('🔄 [loadTasks] Chargement des tâches pour userId:', userId);
-    
     this.tasksSubscription = this.apiService.getTasks(userId).subscribe({
       next: (response: any) => {
-        console.log('✅ [loadTasks] Réponse reçue:', response);
-        
         let rawTasks: any[] = [];
         
         if (response?.data) {
@@ -612,58 +649,67 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
             rawTasks = response.data;
           } else if (response.data.data && Array.isArray(response.data.data)) {
             rawTasks = response.data.data;
-          } else if (response.data.attributes) {
-            rawTasks = [response.data];
           }
         }
         
-        const uniqueTasksMap = new Map<number, any>();
-        rawTasks.forEach(task => {
-          if (task && task.id && !uniqueTasksMap.has(task.id)) {
-            uniqueTasksMap.set(task.id, task);
+        const uniqueTasks = new Map<number, any>();
+        rawTasks.forEach(task => { 
+          if (task?.id && !uniqueTasks.has(task.id)) {
+            uniqueTasks.set(task.id, task);
           }
         });
         
-        const uniqueTasks = Array.from(uniqueTasksMap.values());
-        
-        this.tasks = uniqueTasks.filter((task: any) => {
-          const assignedTo = task.assigned_to;
-          if (!assignedTo) return false;
-          
-          if (typeof assignedTo === 'object') {
-            return assignedTo.id === userId;
-          }
-          if (typeof assignedTo === 'number') {
-            return assignedTo === userId;
-          }
-          return false;
-        });
-        
-        this.tasks.sort((a, b) => {
-          if (a.due_date && b.due_date) {
-            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-          }
-          return 0;
-        });
+        this.tasks = Array.from(uniqueTasks.values())
+          .filter((task: any) => {
+            const assignedTo = task.assigned_to;
+            if (!assignedTo) return false;
+            if (typeof assignedTo === 'object') return assignedTo.id === userId;
+            if (typeof assignedTo === 'number') return assignedTo === userId;
+            return false;
+          })
+          .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
         
         this.filterTasks();
         this.updateTaskStats();
+        this.cdr.detectChanges();
       },
-      error: (error) => {
-        console.error('❌ Erreur chargement tâches:', error);
-        this.loadMockTasks();
+      error: () => {
+        this.setMockTasks();
+        this.cdr.detectChanges();
       }
     });
   }
   
-  loadMockTasks(): void {
+  private setMockTasks(): void {
     this.tasks = [
-      { id: 1, title: 'Développer le dashboard employé', description: 'Créer l\'interface utilisateur', priority: 'HIGH', statuts: 'IN_PROGRESS', due_date: '2026-04-15' },
-      { id: 2, title: 'Rédiger la documentation', description: 'Documenter les fonctionnalités', priority: 'MEDIUM', statuts: 'TODO', due_date: '2026-04-20' },
-      { id: 3, title: 'Tester les fonctionnalités', description: 'Effectuer les tests unitaires', priority: 'LOW', statuts: 'DONE', due_date: '2026-03-30' }
-    ];
+      { 
+        id: 1, 
+        title: 'Développer le dashboard employé', 
+        description: 'Créer l\'interface utilisateur', 
+        priority: 'HIGH', 
+        statuts: 'IN_PROGRESS', 
+        due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+      },
+      { 
+        id: 2, 
+        title: 'Rédiger la documentation', 
+        description: 'Documenter les fonctionnalités', 
+        priority: 'MEDIUM', 
+        statuts: 'TODO', 
+        due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+      },
+      { 
+        id: 3, 
+        title: 'Tester les fonctionnalités', 
+        description: 'Effectuer les tests unitaires', 
+        priority: 'LOW', 
+        statuts: 'DONE', 
+        due_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+      }
+    ] as Task[];
     this.filterTasks();
     this.updateTaskStats();
+    this.cdr.detectChanges();
   }
   
   filterTasks(): void {
@@ -672,120 +718,112 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     } else {
       this.filteredTasks = this.tasks.filter(task => task.statuts === this.taskFilter);
     }
+    this.cdr.detectChanges();
   }
   
-  updateTaskStats(): void {
+  private updateTaskStats(): void {
     this.totalTasks = this.tasks.length;
     this.tasksCompleted = this.tasks.filter(t => t.statuts === 'DONE').length;
-    this.productivityScore = this.totalTasks > 0 ? Math.round((this.tasksCompleted / this.totalTasks) * 100) : 85;
+    this.cdr.detectChanges();
   }
   
-  updateTaskStatus(task: any): void {
+  updateTaskStatus(task: Task): void {
     if (task.statuts === 'DONE') {
       this.showNotificationMessage('Cette tâche est déjà terminée', 'error');
       return;
     }
     
-    if (!this.isAuthenticated()) {
-      this.showNotificationMessage('Veuillez vous connecter', 'error');
-      return;
-    }
-    
-    this.apiService.updateTaskStatus(task.id, 'DONE').pipe(
-      catchError((error) => {
-        console.error('❌ Erreur mise à jour tâche:', error);
+    this.apiService.updateTaskStatus(task.id, 'DONE').subscribe({
+      next: () => {
+        task.statuts = 'DONE';
+        this.updateTaskStats();
+        this.filterTasks();
+        this.showNotificationMessage('Tâche marquée comme terminée!', 'success');
+        this.cdr.detectChanges();
+      },
+      error: () => {
         this.showNotificationMessage('Erreur lors de la mise à jour', 'error');
-        return of(null);
-      })
-    ).subscribe(() => {
-      task.statuts = 'DONE';
-      this.updateTaskStats();
-      this.showNotificationMessage('Tâche marquée comme terminée!', 'success');
+      }
     });
   }
   
-  // ========== CONGÉS ==========
+  getStatusLabel(status: string): string {
+    const labels: Record<string, string> = { 
+      'TODO': 'À faire', 
+      'IN_PROGRESS': 'En cours', 
+      'DONE': 'Terminé' 
+    };
+    return labels[status] || status;
+  }
   
-  loadLeaveRequests(): void {
-    if (!this.isAuthenticated()) {
-      this.loadMockLeaveRequests();
+  /**
+   * Retourne le nombre de tâches par statut
+   */
+  getStatusCount(status: string): number {
+    return this.tasks.filter(t => t.statuts === status).length;
+  }
+  
+  /**
+   * Vérifie si une tâche est en retard
+   */
+  isTaskOverdue(dueDate: string): boolean {
+    if (!dueDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    return due < today;
+  }
+  
+  // ============================================
+  // LEAVE REQUESTS METHODS
+  // ============================================
+  
+  private loadLeaveRequests(): void {
+    if (!this.apiService.isAuthenticated()) {
+      this.setMockLeaveRequests();
       return;
     }
     
     this.apiService.getLeaveRequests().subscribe({
       next: (response) => {
-        if (response && response.data) {
+        if (response?.data) {
           this.leaveRequests = response.data;
           this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
+          this.cdr.detectChanges();
         }
       },
-      error: (error) => {
-        if (error.status !== 401) {
-          console.error('❌ Erreur chargement congés:', error);
-        }
-        this.loadMockLeaveRequests();
+      error: () => {
+        this.setMockLeaveRequests();
+        this.cdr.detectChanges();
       }
     });
   }
   
-  loadWeeklyStats(): void {
-    if (!this.isAuthenticated()) {
-      this.loadMockWeeklyStats();
-      return;
-    }
-    
-    this.apiService.getWeeklyStats().subscribe({
-      next: (response) => {
-        if (response && response.success) {
-          const data = response.data;
-          this.weeklyData.datasets[0].data = [
-            data.daily?.monday || 0,
-            data.daily?.tuesday || 0,
-            data.daily?.wednesday || 0,
-            data.daily?.thursday || 0,
-            data.daily?.friday || 0,
-            data.daily?.saturday || 0
-          ];
-          this.weeklyData = { ...this.weeklyData };
-        }
-      },
-      error: (error) => {
-        if (error.status !== 401) {
-          console.error('❌ Erreur chargement stats:', error);
-        }
-        this.loadMockWeeklyStats();
-      }
-    });
-  }
-  
-  loadTodayActivityStats(): void {
-    this.apiService.getTodayActivityStats().subscribe({
-      next: (response: any) => {
-        if (response && response.success) {
-          this.todayMouseClicks = response.data.total_mouse_clicks || 0;
-          this.todayKeyboardClicks = response.data.total_keyboard_clicks || 0;
-          this.todayActivityLevel = response.data.avg_activity_level || 0;
-          this.todayActivityLogsCount = response.data.logs_count || 0;
-          console.log('📊 Stats activité chargées:', {
-            souris: this.todayMouseClicks,
-            clavier: this.todayKeyboardClicks,
-            niveau: this.todayActivityLevel,
-            logs: this.todayActivityLogsCount
-          });
-        }
-      },
-      error: (err: any) => console.error('Erreur chargement stats activité:', err)
-    });
-  }
-  
-  loadMockLeaveRequests(): void {
+  private setMockLeaveRequests(): void {
     this.leaveRequests = [
-      { id: 1, type: 'ANNUAL', start_date: '2026-04-10', end_date: '2026-04-15', reason: 'Vacances de printemps', statuts: 'PENDING' }
+      { 
+        id: 1, 
+        type: 'ANNUAL', 
+        start_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
+        end_date: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
+        reason: 'Vacances de printemps', 
+        statuts: 'PENDING', 
+        created_at: new Date().toISOString() 
+      }
     ];
     this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
+    this.cdr.detectChanges();
   }
   
-  editLeaveRequest(leave: any): void {
+  openLeaveModal(): void {
+    this.newLeave = { type: 'ANNUAL', start_date: '', end_date: '', reason: '' };
+    this.editingLeaveId = null;
+    this.leaveValidationErrors = [];
+    this.showLeaveModal = true;
+  }
+  
+  editLeaveRequest(leave: LeaveRequest): void {
     if (leave.statuts !== 'PENDING') {
       this.showNotificationMessage('Seules les demandes en attente peuvent être modifiées', 'error');
       return;
@@ -797,12 +835,97 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       end_date: this.formatDateForInput(leave.end_date),
       reason: leave.reason
     };
-    
     this.editingLeaveId = leave.id;
     this.showLeaveModal = true;
   }
   
-  openDeleteModal(id: number, leave: any): void {
+  closeLeaveModal(): void {
+    this.showLeaveModal = false;
+    this.editingLeaveId = null;
+  }
+  
+  closeModal(event: MouseEvent): void {
+    if ((event.target as HTMLElement).classList.contains('modal')) {
+      this.closeLeaveModal();
+    }
+  }
+  
+  submitLeaveRequest(): void {
+    if (!this.validateLeaveForm()) return;
+    
+    this.isLoading = true;
+    const leaveData = {
+      type: this.newLeave.type,
+      start_date: this.newLeave.start_date,
+      end_date: this.newLeave.end_date,
+      reason: this.newLeave.reason || ''
+    };
+    
+    const request$ = this.editingLeaveId 
+      ? this.apiService.updateLeaveRequest(this.editingLeaveId, leaveData)
+      : this.apiService.createLeaveRequest(leaveData);
+    
+    request$.subscribe({
+      next: (response: any) => {
+        if (this.editingLeaveId) {
+          const index = this.leaveRequests.findIndex(r => r.id === this.editingLeaveId);
+          if (index !== -1) {
+            this.leaveRequests[index] = { ...this.leaveRequests[index], ...response.data };
+          }
+        } else {
+          this.leaveRequests.unshift(response.data);
+        }
+        this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
+        this.showNotificationMessage(
+          this.editingLeaveId ? 'Demande modifiée avec succès' : 'Demande de congé envoyée avec succès', 
+          'success'
+        );
+        this.closeLeaveModal();
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
+        this.isLoading = false;
+      }
+    });
+  }
+  
+  private validateLeaveForm(): boolean {
+    this.leaveValidationErrors = [];
+    
+    if (!this.newLeave.start_date) {
+      this.leaveValidationErrors.push('La date de début est requise');
+    }
+    if (!this.newLeave.end_date) {
+      this.leaveValidationErrors.push('La date de fin est requise');
+    }
+    if (!this.newLeave.reason) {
+      this.leaveValidationErrors.push('La raison est requise');
+    }
+    
+    if (this.newLeave.start_date && this.newLeave.end_date) {
+      const startDate = new Date(this.newLeave.start_date);
+      const endDate = new Date(this.newLeave.end_date);
+      const today = new Date(); 
+      today.setHours(0, 0, 0, 0);
+      
+      if (startDate > endDate) {
+        this.leaveValidationErrors.push('La date de début doit être antérieure à la date de fin');
+      }
+      if (startDate < today) {
+        this.leaveValidationErrors.push('La date de début ne peut pas être dans le passé');
+      }
+    }
+    
+    return this.leaveValidationErrors.length === 0;
+  }
+  
+  canSubmitLeave(): boolean {
+    return !!this.newLeave.start_date && !!this.newLeave.end_date && !!this.newLeave.reason;
+  }
+  
+  openDeleteModal(id: number, leave: LeaveRequest): void {
     this.deleteRequestId = id;
     this.deleteRequestTitle = `${leave.type} du ${this.formatDate(leave.start_date)} au ${this.formatDate(leave.end_date)}`;
     this.showDeleteModal = true;
@@ -821,9 +944,9 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         this.showNotificationMessage('Demande supprimée avec succès', 'success');
         this.isLoading = false;
         this.deleteRequestId = null;
+        this.cdr.detectChanges();
       },
-      error: (error: any) => {
-        console.error('❌ Erreur suppression:', error);
+      error: () => {
         this.showNotificationMessage('Erreur lors de la suppression', 'error');
         this.isLoading = false;
         this.deleteRequestId = null;
@@ -837,278 +960,169 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.deleteRequestTitle = '';
   }
   
-  submitLeaveRequest(): void {
-    if (!this.validateLeaveForm()) return;
-
-    this.isLoading = true;
-
-    const leaveData = {
-      type: this.newLeave.type,
-      start_date: this.newLeave.start_date,
-      end_date: this.newLeave.end_date,
-      reason: this.newLeave.reason || ''
-    };
-
-    if (this.editingLeaveId) {
-      this.apiService.updateLeaveRequest(this.editingLeaveId, leaveData).subscribe({
-        next: (response: any) => {
-          const index = this.leaveRequests.findIndex(r => r.id === this.editingLeaveId);
-          if (index !== -1) {
-            this.leaveRequests[index] = { ...this.leaveRequests[index], ...response.data };
-          }
-          this.pendingRequests = this.leaveRequests.filter(r => r.statuts === 'PENDING').length;
-          this.showNotificationMessage('Demande modifiée avec succès', 'success');
-          this.closeLeaveModal();
-          this.isLoading = false;
-        },
-        error: (error: any) => {
-          console.error('❌ Erreur modification:', error);
-          this.showNotificationMessage('Erreur lors de la modification', 'error');
-          this.isLoading = false;
-        }
-      });
-    } else {
-      this.apiService.createLeaveRequest(leaveData).subscribe({
-        next: (response: any) => {
-          this.leaveRequests.unshift(response.data);
-          this.pendingRequests++;
-          this.showNotificationMessage('Demande de congé envoyée avec succès', 'success');
-          this.closeLeaveModal();
-          this.isLoading = false;
-        },
-        error: (error: any) => {
-          console.error('❌ Erreur:', error);
-          this.showNotificationMessage('Erreur lors de l\'envoi de la demande', 'error');
-          this.isLoading = false;
-        }
-      });
-    }
-  }
-  
-  validateLeaveForm(): boolean {
-    this.leaveValidationErrors = [];
-    
-    if (!this.newLeave.start_date) {
-      this.leaveValidationErrors.push('La date de début est requise');
-    }
-    
-    if (!this.newLeave.end_date) {
-      this.leaveValidationErrors.push('La date de fin est requise');
-    }
-    
-    if (!this.newLeave.reason) {
-      this.leaveValidationErrors.push('La raison est requise');
-    }
-    
-    if (this.newLeave.start_date && this.newLeave.end_date) {
-      const startDate = new Date(this.newLeave.start_date);
-      const endDate = new Date(this.newLeave.end_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (startDate > endDate) {
-        this.leaveValidationErrors.push('La date de début doit être antérieure à la date de fin');
-      }
-      
-      if (startDate < today) {
-        this.leaveValidationErrors.push('La date de début ne peut pas être dans le passé');
-      }
-    }
-    
-    return this.leaveValidationErrors.length === 0;
-  }
-  
-  canSubmitLeave(): boolean {
-    return this.newLeave.start_date !== '' && 
-           this.newLeave.end_date !== '' && 
-           this.newLeave.reason !== '';
-  }
-  
-  openLeaveModal(): void {
-    this.newLeave = {
-      type: 'ANNUAL',
-      start_date: '',
-      end_date: '',
-      reason: ''
-    };
-    this.editingLeaveId = null;
-    this.leaveValidationErrors = [];
-    this.showLeaveModal = true;
-  }
-  
-  closeLeaveModal(): void {
-    this.showLeaveModal = false;
-    this.editingLeaveId = null;
-    this.newLeave = {
-      type: 'ANNUAL',
-      start_date: '',
-      end_date: '',
-      reason: ''
-    };
-  }
-  
-  closeModal(event: MouseEvent): void {
-    if ((event.target as HTMLElement).classList.contains('modal')) {
-      this.closeLeaveModal();
-    }
-  }
-  
-  refreshData(): void {
-    console.log('🔄 RefreshData - Rafraîchissement des données');
-    this.isLoading = true;
-    this.loadTodayAttendance();
-    this.loadTasks();
-    this.loadLeaveRequests();
-    this.loadWeeklyStats();
-    this.loadTodayActivityStats();
-    setTimeout(() => {
-      this.showNotificationMessage('Données rafraîchies!', 'success');
-      this.isLoading = false;
-    }, 500);
-  }
-  
-  updateStatusDisplay(status: string): void {
-    let statusText = '';
-    let statusClass = '';
-    
-    switch(status) {
-      case 'PRESENT':
-        statusText = '✅ Présent';
-        statusClass = 'status-present';
-        break;
-      case 'LATE':
-        statusText = '⚠️ En retard';
-        statusClass = 'status-late';
-        break;
-      case 'PARTIAL':
-        statusText = '⏳ Journée incomplète';
-        statusClass = 'status-partial';
-        break;
-      case 'ABSENT':
-        statusText = '❌ Absent';
-        statusClass = 'status-absent';
-        break;
-      default:
-        statusText = '📅 Non pointé';
-        statusClass = 'status-not-checked';
-    }
-    
-    this.currentStatus = statusText;
-    this.currentStatusClass = statusClass;
-  }
-  
-  getStatusLabel(status: string): string {
-    const labels: any = {
-      'TODO': 'À faire',
-      'IN_PROGRESS': 'En cours',
-      'DONE': 'Terminé'
-    };
-    return labels[status] || status;
-  }
-  
   getLeaveStatusLabel(status: string): string {
-    const labels: any = {
-      'PENDING': 'En attente',
-      'APPROVED': 'Approuvé',
-      'REJECTED': 'Refusé',
-      'CANCELLED': 'Annulé'
+    const labels: Record<string, string> = { 
+      'PENDING': 'En attente', 
+      'APPROVED': 'Approuvé', 
+      'REJECTED': 'Refusé', 
+      'CANCELLED': 'Annulé' 
     };
     return labels[status] || status;
   }
   
-  showNotificationMessage(message: string, type: 'success' | 'error' = 'success'): void {
-    this.notificationMessage = message;
-    this.notificationType = type;
-    this.notificationIcon = type === 'success' ? '✅' : '❌';
-    this.showNotification = true;
-    
-    setTimeout(() => {
-      this.showNotification = false;
-    }, 3000);
+  /**
+   * Retourne le libellé du type de congé
+   */
+  getLeaveTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      'ANNUAL': 'Congés annuels',
+      'SICK': 'Congés maladie',
+      'PERSONAL': 'Congés personnels',
+      'UNPAID': 'Congés sans solde',
+      'MATERNITY': 'Congé maternité',
+      'OTHER': 'Autre'
+    };
+    return labels[type] || type;
   }
-
-  // ========== ACTIVITY TRACKING METHODS ==========
-
-  initActivityTracking(): void {
-    console.log('🖱️ Démarrage du tracking d\'activité');
+  
+  // ============================================
+  // STATS METHODS
+  // ============================================
+  
+  private loadWeeklyStats(): void {
+    if (!this.apiService.isAuthenticated()) {
+      this.setMockWeeklyStats();
+      return;
+    }
     
+    this.apiService.getWeeklyStats().subscribe({
+      next: (response) => {
+        if (response?.success) {
+          const data = response.data;
+          this.weeklyData.datasets[0].data = [
+            data.daily?.monday || 0,
+            data.daily?.tuesday || 0,
+            data.daily?.wednesday || 0,
+            data.daily?.thursday || 0,
+            data.daily?.friday || 0,
+            data.daily?.saturday || 0
+          ];
+          this.weeklyData = { ...this.weeklyData };
+          this.cdr.detectChanges();
+        }
+      },
+      error: () => {
+        this.setMockWeeklyStats();
+      }
+    });
+  }
+  
+  private setMockWeeklyStats(): void {
+    this.weeklyData.datasets[0].data = [7.5, 8, 6.5, 8.5, 7, 0];
+    this.weeklyData = { ...this.weeklyData };
+    this.cdr.detectChanges();
+  }
+  
+  private loadTodayActivityStats(): void {
+    this.apiService.getTodayActivityStats().subscribe({
+      next: (response: ActivityStats) => {
+        if (response) {
+          this.todayMouseClicks = response.total_mouse_clicks || 0;
+          this.todayKeyboardClicks = response.total_keyboard_clicks || 0;
+          this.todayActivityLevel = response.avg_activity_level || 0;
+          this.todayActivityLogsCount = response.logs_count || 0;
+          this.activityTrend = response.trend || 0;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err) => {
+        console.warn('⚠️ Erreur chargement stats activité:', err);
+        // Valeurs par défaut
+        this.todayMouseClicks = 0;
+        this.todayKeyboardClicks = 0;
+        this.todayActivityLevel = 50;
+        this.todayActivityLogsCount = 0;
+        this.activityTrend = 0;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+  
+  // ============================================
+  // ACTIVITY TRACKING
+  // ============================================
+  
+  private initActivityTracking(): void {
+    console.log('🖱️ Démarrage du tracking d\'activité');
     this.lastActivityTime = Date.now();
     this.setupActivityListeners();
     this.startPeriodicSend();
     this.startInactivityChecker();
   }
-
+  
   private setupActivityListeners(): void {
     const activityHandler = () => this.onUserActivity();
+    const events = ['mousemove', 'click', 'keypress', 'scroll'];
     
-    window.addEventListener('mousemove', activityHandler);
-    window.addEventListener('click', activityHandler);
-    window.addEventListener('keypress', activityHandler);
-    window.addEventListener('scroll', activityHandler);
-    
-    this.activityListeners.set('mousemove', activityHandler);
-    this.activityListeners.set('click', activityHandler);
-    this.activityListeners.set('keypress', activityHandler);
-    this.activityListeners.set('scroll', activityHandler);
+    events.forEach(event => {
+      window.addEventListener(event, activityHandler);
+      this.activityListeners.set(event, activityHandler);
+    });
   }
-
+  
   private onUserActivity(): void {
     const now = Date.now();
-    
     this.lastActivityTime = now;
     
     if (!this.isUserActive) {
       this.isUserActive = true;
-      console.log(`🟢 Utilisateur réactivé`);
+      console.log('🟢 Utilisateur réactivé');
+      this.cdr.detectChanges();
     }
     
     this.mouseClicks++;
     this.todayMouseClicks++;
+    this.cdr.detectChanges();
   }
-
+  
   private startInactivityChecker(): void {
     this.inactivityCheckInterval = setInterval(() => {
-      const now = Date.now();
-      const minutesSinceLastActivity = (now - this.lastActivityTime) / 1000 / 60;
-      const roundedMinutes = Math.round(minutesSinceLastActivity * 10) / 10;
-      
+      const minutesSinceLastActivity = (Date.now() - this.lastActivityTime) / 60000;
       this.inactiveDisplayMinutes = Math.floor(minutesSinceLastActivity);
       
       if (minutesSinceLastActivity >= this.INACTIVITY_THRESHOLD) {
         this.currentActivityLevel = 0;
         if (this.isUserActive) {
           this.isUserActive = false;
-          console.log(`🔴 DÉTECTION D'INACTIVITÉ PROLONGÉE: ${roundedMinutes} minutes sans activité`);
+          console.log(`🔴 Inactivité prolongée: ${minutesSinceLastActivity.toFixed(1)} minutes`);
+          this.cdr.detectChanges();
         }
       } else {
         const activityPercent = 100 - (minutesSinceLastActivity / this.INACTIVITY_THRESHOLD) * 100;
         this.currentActivityLevel = Math.max(0, Math.min(100, Math.round(activityPercent)));
       }
       
-      if (minutesSinceLastActivity > 10 && minutesSinceLastActivity < 15 && this.isUserActive) {
-        console.log(`⚠️ Attention: ${roundedMinutes} minutes d'inactivité, bientôt détection...`);
-      }
-      
+      this.todayActivityLevel = this.currentActivityLevel;
+      this.cdr.detectChanges();
     }, 10000);
   }
-
+  
   private startPeriodicSend(): void {
     this.activityInterval = setInterval(() => {
       if (this.isCheckedIn && !this.isCheckedOut) {
-        
-        console.log(`📊 [ACTIVITY] Envoi log - Souris: ${this.mouseClicks}, Clavier: ${this.keyboardClicks}, Niveau: ${this.currentActivityLevel}%, Inactif: ${!this.isUserActive}`);
-        
         this.apiService.sendActivityLog({
           keyboard_clicks: this.keyboardClicks,
           mouse_clicks: this.mouseClicks,
-          activity_level: this.currentActivityLevel,
-          projectId: undefined
+          activity_level: this.currentActivityLevel
         }).subscribe({
           next: () => {
             this.keyboardClicks = 0;
             this.mouseClicks = 0;
+            this.cdr.detectChanges();
           },
-          error: (err: any) => console.error('❌ Erreur envoi log:', err)
+          error: (err) => {
+            console.error('❌ Erreur envoi log:', err);
+          }
         });
       } else {
         this.keyboardClicks = 0;
@@ -1116,7 +1130,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       }
     }, this.SEND_INTERVAL);
   }
-
+  
   private stopActivityTracking(): void {
     if (this.activityInterval) {
       clearInterval(this.activityInterval);
@@ -1134,59 +1148,57 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     
     console.log('🛑 Tracking d\'activité arrêté');
   }
-
-  // ========== SCREENSHOTS METHODS ==========
-
-  startAutoScreenshots(): void {
+  
+  // ============================================
+  // SCREENSHOTS
+  // ============================================
+  
+  private startAutoScreenshots(): void {
     console.log('📸 Démarrage des captures automatiques toutes les 10 minutes');
     this.screenshotInterval = setInterval(() => {
       if (this.isCheckedIn && !this.isCheckedOut) {
         this.captureScreenshot();
-      } else {
-        console.log('📸 Capture ignorée - utilisateur non check-in');
       }
     }, this.SCREENSHOT_INTERVAL);
   }
-
+  
   async captureScreenshot(): Promise<void> {
     try {
       console.log('📸 Capture d\'écran en cours...');
-      
       const html2canvasModule = await import('html2canvas');
-      const html2canvas = html2canvasModule.default;
-      
-      const canvas = await html2canvas(document.body, {
+      const canvas = await html2canvasModule.default(document.body, {
         scale: 0.5,
         logging: false,
         useCORS: true,
         backgroundColor: '#ffffff'
       });
       
-      const imageData = canvas.toDataURL('image/png');
-      
-      this.apiService.captureAndCompare(imageData, null).subscribe({
+      this.apiService.captureAndCompare(canvas.toDataURL('image/png'), null).subscribe({
         next: (response: any) => {
-          if (response && response.success) {
-            console.log(`✅ Capture sauvegardée - ${response.message}`);
+          if (response?.success) {
+            const msg = response.message || 'Capture sauvegardée avec succès';
+            console.log(`✅ ${msg}`);
             if (response.is_identical) {
-              console.log(`📊 Similarité: ${response.similarity_score}% - Capture identique, ancienne supprimée`);
+              console.log(`📊 Similarité: ${response.similarity_score}%`);
             }
           }
         },
-        error: (err: any) => {
-          console.error('❌ Erreur lors de l\'envoi de la capture:', err);
+        error: (err) => {
+          console.error('❌ Erreur envoi capture:', err);
         }
       });
-      
     } catch (error) {
       console.error('❌ Erreur capture écran:', error);
     }
   }
-
-  // ========== AI SCORE METHODS ==========
-
+  
+  // ============================================
+  // AI SCORE
+  // ============================================
+  
   calculateAIScore(): void {
     this.isCalculatingScore = true;
+    this.cdr.detectChanges();
     
     const endDate = new Date();
     const startDate = new Date();
@@ -1195,33 +1207,80 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     const startDateStr = startDate.toISOString().split('T')[0];
     const endDateStr = endDate.toISOString().split('T')[0];
     
-    console.log('🤖 Calcul du score IA pour la période:', startDateStr, '→', endDateStr);
+    console.log(`🤖 Calcul du score IA pour la période: ${startDateStr} → ${endDateStr}`);
     
     this.apiService.exportForAI(startDateStr, endDateStr).subscribe({
       next: (response: any) => {
-        if (response && response.success) {
-          console.log('📊 Données exportées avec succès');
-          
+        if (response?.success) {
           this.aiScoreService.calculateScore(response.data).subscribe({
-            next: (result: any) => {
+            next: (result: ProductivityResponse) => {
               this.aiScore = result.score;
               this.aiLevel = result.level;
-              this.aiRecommendations = result.recommendations;
+              this.aiLevelIcon = result.level_icon;
+              this.aiLevelColor = result.level_color;
+              this.aiRecommendations = result.recommendations || [];
+              this.aiRecommendationsDetailed = result.recommendations_detailed || [];
+              this.aiPenalties = result.details?.penalties || [];
+              this.aiBonuses = result.details?.bonuses || [];
               this.isCalculatingScore = false;
+              this.cdr.detectChanges();
               console.log(`🤖 Score IA: ${this.aiScore}% - ${this.aiLevel}`);
-              console.log('📝 Recommandations:', this.aiRecommendations);
             },
-            error: (err: any) => {
+            error: (err) => { 
               console.error('❌ Erreur calcul IA:', err);
-              this.isCalculatingScore = false;
+              this.isCalculatingScore = false; 
+              this.cdr.detectChanges(); 
             }
           });
+        } else {
+          this.isCalculatingScore = false;
+          this.cdr.detectChanges();
         }
       },
-      error: (err: any) => {
+      error: (err) => { 
         console.error('❌ Erreur export données:', err);
-        this.isCalculatingScore = false;
+        this.isCalculatingScore = false; 
+        this.cdr.detectChanges(); 
       }
     });
+  }
+  
+  // ============================================
+  // UTILITIES
+  // ============================================
+  
+  refreshData(): void {
+    console.log('🔄 Rafraîchissement des données');
+    this.isLoading = true;
+    this.cdr.detectChanges();
+    
+    this.loadTodayAttendance();
+    this.loadTasks();
+    this.loadLeaveRequests();
+    this.loadWeeklyStats();
+    this.loadTodayActivityStats();
+    this.calculateAIScore();
+    
+    setTimeout(() => {
+      this.showNotificationMessage('Données rafraîchies!', 'success');
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }, 1000);
+  }
+  
+  private showNotificationMessage(message: string, type: 'success' | 'error' = 'success'): void {
+    this.notification = { 
+      message, 
+      type, 
+      icon: type === 'success' ? '✅' : '❌' 
+    };
+    this.showNotification = true;
+    this.cdr.detectChanges();
+    
+    setTimeout(() => {
+      this.showNotification = false;
+      this.notification = null;
+      this.cdr.detectChanges();
+    }, 3000);
   }
 }

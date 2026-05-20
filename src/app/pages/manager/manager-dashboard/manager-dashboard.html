@@ -1,7 +1,11 @@
 <!-- src/app/pages/manager/manager-dashboard/manager-dashboard.html -->
+<!-- Version: 2.2.0 - Corrigée et synchronisée avec le TypeScript -->
+
 <div class="manager-dashboard">
 
+  <!-- ============================================ -->
   <!-- HEADER -->
+  <!-- ============================================ -->
   <div class="dashboard-header">
     <div class="header-left">
       <div class="icon">
@@ -14,25 +18,64 @@
     </div>
 
     <div class="header-actions">
-      <button mat-raised-button color="primary" (click)="openCreateLeaveDialog()" *ngIf="uiState.activeTab === 'leave'">
+      <!-- Bouton Nouvelle demande (visible uniquement sur l'onglet Congés) -->
+      <button 
+        *ngIf="uiState.activeTab === tabTypes.LEAVE"
+        mat-raised-button 
+        color="primary" 
+        (click)="openCreateLeaveDialog()"
+        matTooltip="Créer une nouvelle demande de congé">
         <mat-icon>add</mat-icon>
         Nouvelle demande
       </button>
 
-      <button mat-stroked-button (click)="refreshData()" [disabled]="uiState.isRefreshing">
+      <!-- Mode Mocké (badge de debug - caché en production) -->
+      <button 
+        *ngIf="uiState.useMockData"
+        mat-stroked-button 
+        color="warn"
+        (click)="toggleMockMode()"
+        matTooltip="Mode mocké actif - Cliquer pour passer en mode API réelle"
+        class="mock-badge">
+        <mat-icon>bug_report</mat-icon>
+        Mode Mocké
+      </button>
+
+      <!-- Bouton Rafraîchir -->
+      <button 
+        mat-stroked-button 
+        (click)="refreshData()" 
+        [disabled]="uiState.isRefreshing"
+        matTooltip="Dernier refresh: {{ getLastRefreshTime() }}">
         <mat-icon [class.spin]="uiState.isRefreshing">refresh</mat-icon>
         {{ uiState.isRefreshing ? 'Chargement...' : 'Actualiser' }}
       </button>
     </div>
   </div>
 
+  <!-- ============================================ -->
+  <!-- MESSAGE D'ERREUR -->
+  <!-- ============================================ -->
+  <div class="error-message" *ngIf="uiState.errorMessage">
+    <mat-icon>error_outline</mat-icon>
+    <span>{{ uiState.errorMessage }}</span>
+    <button mat-icon-button (click)="uiState.errorMessage = null">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <!-- ============================================ -->
   <!-- STATS (visible uniquement sur l'onglet Congés) -->
-  <div class="stats-grid" *ngIf="stats && !uiState.isLoading && uiState.activeTab === 'leave'">
+  <!-- ============================================ -->
+  <div 
+    class="stats-grid" 
+    *ngIf="stats && !uiState.isLoading && uiState.activeTab === tabTypes.LEAVE">
+    
     <div class="stat-card">
       <mat-icon>event_note</mat-icon>
       <div>
         <h2>{{ stats.total }}</h2>
-        <p>Total</p>
+        <p>Total demandes</p>
       </div>
     </div>
 
@@ -72,25 +115,19 @@
       <mat-icon>schedule</mat-icon>
       <div>
         <h2>{{ getLeaveAverageResponseTime() }}</h2>
-        <p>Temps réponse</p>
+        <p>Temps réponse moy.</p>
       </div>
     </div>
   </div>
 
+  <!-- ============================================ -->
   <!-- CHART + TYPES (visible uniquement sur l'onglet Congés) -->
-  <div class="charts-section" *ngIf="stats && !uiState.isLoading && uiState.activeTab === 'leave'">
-    <!-- CHART PLACEHOLDER -->
-    <div class="chart-card">
-      <div class="card-header">
-        <mat-icon>pie_chart</mat-icon>
-        <h3>Répartition des demandes</h3>
-      </div>
-      <div class="chart-placeholder">
-        <canvas id="leaveChart"></canvas>
-      </div>
-    </div>
-
-    <!-- TYPES -->
+  <!-- ============================================ -->
+  <div 
+    class="charts-section" 
+    *ngIf="stats && !uiState.isLoading && uiState.activeTab === tabTypes.LEAVE">
+    
+    <!-- Types de congés - Barres horizontales -->
     <div class="types-card">
       <div class="card-header">
         <mat-icon>category</mat-icon>
@@ -99,84 +136,106 @@
 
       <div class="types-list">
         <div class="type-item">
-          <span>🏖️ Annuel</span>
+          <span class="type-label">🏖️ Annuel</span>
           <div class="bar">
-            <div class="fill" [style.width.%]="stats.total > 0 ? (stats.byType.ANNUAL / stats.total) * 100 : 0"></div>
+            <div 
+              class="fill annual" 
+              [style.width.%]="stats.total > 0 ? (stats.byType.ANNUAL / stats.total) * 100 : 0">
+            </div>
           </div>
-          <span>{{ stats.byType.ANNUAL }}</span>
+          <span class="type-count">{{ stats.byType.ANNUAL }}</span>
         </div>
 
         <div class="type-item">
-          <span>🤒 Maladie</span>
+          <span class="type-label">🤒 Maladie</span>
           <div class="bar">
-            <div class="fill sick" [style.width.%]="stats.total > 0 ? (stats.byType.SICK / stats.total) * 100 : 0"></div>
+            <div 
+              class="fill sick" 
+              [style.width.%]="stats.total > 0 ? (stats.byType.SICK / stats.total) * 100 : 0">
+            </div>
           </div>
-          <span>{{ stats.byType.SICK }}</span>
+          <span class="type-count">{{ stats.byType.SICK }}</span>
         </div>
 
         <div class="type-item">
-          <span>👤 Personnel</span>
+          <span class="type-label">👤 Personnel</span>
           <div class="bar">
-            <div class="fill personal" [style.width.%]="stats.total > 0 ? (stats.byType.PERSONAL / stats.total) * 100 : 0"></div>
+            <div 
+              class="fill personal" 
+              [style.width.%]="stats.total > 0 ? (stats.byType.PERSONAL / stats.total) * 100 : 0">
+            </div>
           </div>
-          <span>{{ stats.byType.PERSONAL }}</span>
+          <span class="type-count">{{ stats.byType.PERSONAL }}</span>
         </div>
 
         <div class="type-item">
-          <span>💰 Sans solde</span>
+          <span class="type-label">💰 Sans solde</span>
           <div class="bar">
-            <div class="fill unpaid" [style.width.%]="stats.total > 0 ? (stats.byType.UNPAID / stats.total) * 100 : 0"></div>
+            <div 
+              class="fill unpaid" 
+              [style.width.%]="stats.total > 0 ? (stats.byType.UNPAID / stats.total) * 100 : 0">
+            </div>
           </div>
-          <span>{{ stats.byType.UNPAID }}</span>
+          <span class="type-count">{{ stats.byType.UNPAID }}</span>
         </div>
 
         <div class="type-item">
-          <span>👶 Maternité</span>
+          <span class="type-label">👶 Maternité</span>
           <div class="bar">
-            <div class="fill maternity" [style.width.%]="stats.total > 0 ? (stats.byType.MATERNITY / stats.total) * 100 : 0"></div>
+            <div 
+              class="fill maternity" 
+              [style.width.%]="stats.total > 0 ? (stats.byType.MATERNITY / stats.total) * 100 : 0">
+            </div>
           </div>
-          <span>{{ stats.byType.MATERNITY }}</span>
+          <span class="type-count">{{ stats.byType.MATERNITY }}</span>
         </div>
 
         <div class="type-item">
-          <span>📝 Autre</span>
+          <span class="type-label">📝 Autre</span>
           <div class="bar">
-            <div class="fill other" [style.width.%]="stats.total > 0 ? (stats.byType.OTHER / stats.total) * 100 : 0"></div>
+            <div 
+              class="fill other" 
+              [style.width.%]="stats.total > 0 ? (stats.byType.OTHER / stats.total) * 100 : 0">
+            </div>
           </div>
-          <span>{{ stats.byType.OTHER }}</span>
+          <span class="type-count">{{ stats.byType.OTHER }}</span>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- ============================================ -->
   <!-- MAIN TABS NAVIGATION -->
+  <!-- ============================================ -->
   <div class="main-tabs">
     <div class="main-tabs-header">
       <button 
-        [class.active]="uiState.activeTab === 'leave'"
-        (click)="setActiveTab('leave')">
+        [class.active]="uiState.activeTab === tabTypes.LEAVE"
+        (click)="setActiveTab(tabTypes.LEAVE)">
         <mat-icon>event_note</mat-icon>
         Congés
-        <span class="badge" *ngIf="getTotalPendingLeaveRequests() > 0">{{ getTotalPendingLeaveRequests() }}</span>
+        <span class="badge" *ngIf="getTotalPendingLeaveRequests() > 0">
+          {{ getTotalPendingLeaveRequests() }}
+        </span>
       </button>
 
       <button 
-        [class.active]="uiState.activeTab === 'attendance'"
-        (click)="setActiveTab('attendance')">
+        [class.active]="uiState.activeTab === tabTypes.ATTENDANCE"
+        (click)="setActiveTab(tabTypes.ATTENDANCE)">
         <mat-icon>event_available</mat-icon>
         Présences
       </button>
 
       <button 
-        [class.active]="uiState.activeTab === 'tasks'"
-        (click)="setActiveTab('tasks')">
+        [class.active]="uiState.activeTab === tabTypes.TASKS"
+        (click)="setActiveTab(tabTypes.TASKS)">
         <mat-icon>task</mat-icon>
         Tâches
       </button>
 
       <button 
-        [class.active]="uiState.activeTab === 'projects'"
-        (click)="setActiveTab('projects')">
+        [class.active]="uiState.activeTab === tabTypes.PROJECTS"
+        (click)="setActiveTab(tabTypes.PROJECTS)">
         <mat-icon>folder</mat-icon>
         Projets
       </button>
@@ -184,20 +243,25 @@
 
     <div class="main-tabs-content">
       
+      <!-- ============================================ -->
       <!-- ONGLET CONGÉS -->
-      <div *ngIf="uiState.activeTab === 'leave'" class="tab-content">
+      <!-- ============================================ -->
+      <div *ngIf="uiState.activeTab === tabTypes.LEAVE" class="tab-content">
         <div class="sub-tabs">
           <div class="sub-tabs-header">
             <button 
-              [class.active]="uiState.leaveSubTab === 'myRequests'"
-              (click)="switchLeaveSubTab('myRequests')">
+              [class.active]="uiState.leaveSubTab === subTabTypes.MY_REQUESTS"
+              (click)="switchLeaveSubTab(subTabTypes.MY_REQUESTS)">
               <mat-icon>person</mat-icon>
               Mes demandes
+              <span class="badge" *ngIf="myLeaveRequests.length > 0">
+                {{ myLeaveRequests.length }}
+              </span>
             </button>
 
             <button 
-              [class.active]="uiState.leaveSubTab === 'allRequests'"
-              (click)="switchLeaveSubTab('allRequests')">
+              [class.active]="uiState.leaveSubTab === subTabTypes.ALL_REQUESTS"
+              (click)="switchLeaveSubTab(subTabTypes.ALL_REQUESTS)">
               <mat-icon>people</mat-icon>
               Toutes les demandes
               <span *ngIf="getTotalPendingLeaveRequests() > 0" class="badge warning">
@@ -208,7 +272,7 @@
 
           <div class="sub-tabs-content">
             <!-- Mes demandes -->
-            <div *ngIf="uiState.leaveSubTab === 'myRequests'">
+            <div *ngIf="uiState.leaveSubTab === subTabTypes.MY_REQUESTS">
               <app-leave-request-list
                 title="Mes demandes de congé"
                 [requests]="myLeaveRequests"
@@ -225,7 +289,7 @@
             </div>
 
             <!-- Toutes les demandes -->
-            <div *ngIf="uiState.leaveSubTab === 'allRequests'">
+            <div *ngIf="uiState.leaveSubTab === subTabTypes.ALL_REQUESTS">
               <app-leave-request-list
                 title="Toutes les demandes de congé"
                 [requests]="allLeaveRequests"
@@ -243,25 +307,33 @@
         </div>
       </div>
 
+      <!-- ============================================ -->
       <!-- ONGLET PRÉSENCES -->
-      <div *ngIf="uiState.activeTab === 'attendance'" class="tab-content">
+      <!-- ============================================ -->
+      <div *ngIf="uiState.activeTab === tabTypes.ATTENDANCE" class="tab-content">
         <app-attendance-management></app-attendance-management>
       </div>
 
+      <!-- ============================================ -->
       <!-- ONGLET TÂCHES -->
-      <div *ngIf="uiState.activeTab === 'tasks'" class="tab-content">
+      <!-- ============================================ -->
+      <div *ngIf="uiState.activeTab === tabTypes.TASKS" class="tab-content">
         <app-project-task></app-project-task>
       </div>
 
+      <!-- ============================================ -->
       <!-- ONGLET PROJETS -->
-      <div *ngIf="uiState.activeTab === 'projects'" class="tab-content">
+      <!-- ============================================ -->
+      <div *ngIf="uiState.activeTab === tabTypes.PROJECTS" class="tab-content">
         <app-project-task></app-project-task>
       </div>
 
     </div>
   </div>
 
+  <!-- ============================================ -->
   <!-- LOADING OVERLAY -->
+  <!-- ============================================ -->
   <div class="loading-overlay" *ngIf="uiState.isLoading">
     <div class="loading-content">
       <mat-spinner diameter="40"></mat-spinner>
